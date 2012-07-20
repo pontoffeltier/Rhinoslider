@@ -2,7 +2,7 @@
  * Rhinoslider 1.1 beta
  * http://rhinoslider.com/
  *
- * Copyright 2012: Sebastian Pontow, René Maas (http://renemaas.de/)
+ * Copyright 2012: Sebastian Pontow, Rene Maas (http://renemaas.de/)
  * Dual licensed under the MIT or GPL Version 2 licenses.
  * http://rhinoslider.com/license/
  */
