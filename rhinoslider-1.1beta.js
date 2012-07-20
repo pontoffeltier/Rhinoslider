@@ -1,5 +1,5 @@
 /**
- * Rhinoslider 1.1
+ * Rhinoslider 1.1 beta
  * http://rhinoslider.com/
  *
  * Copyright 2012: Sebastian Pontow, Rene Maas (http://renemaas.de/)
