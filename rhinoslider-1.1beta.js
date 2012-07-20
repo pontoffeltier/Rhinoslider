@@ -64,7 +64,7 @@
 		var
 			setUpSettings = function ($slider, settings) {
 				//bool
-				var tmpValues = ['controlsPrevNext', 'controlsKeyboard', 'controlsMousewheel', 'controlsPlayPause', 'pauseOnHover', 'animateActive', 'autoPlay', 'cycled', 'consoleLog'];
+				var tmpValues = ['controlsPrevNext', 'controlsKeyboard', 'controlsMousewheel', 'controlsPlayPause', 'pauseOnHover', 'animateActive', 'autoPlay', 'cycled', 'consoleLog', 'pauseOnControlUsage'];
 				$.each(tmpValues, function (i, key) {
 					settings[key] = String(settings[key]) === 'true' ? true : false;
 				});
@@ -153,7 +153,7 @@
 						prev($slider, settings);
 
 						//stop autoplay, if set
-						if (vars.isPlaying) {
+						if (vars.isPlaying && settings.pauseOnControlUsage) {
 							pause();
 						}
 						//stop progressbar, if is included
@@ -167,7 +167,7 @@
 						next($slider, settings);
 
 						//stop autoplay, if set
-						if (vars.isPlaying) {
+						if (vars.isPlaying && settings.pauseOnControlUsage) {
 							pause();
 						}
 						//stop progressbar, if is included
@@ -323,7 +323,7 @@
 						}
 
 						//stop autoplay, if set
-						if (vars.isPlaying) {
+						if (vars.isPlaying && settings.pauseOnControlUsage) {
 							pause();
 						}
 					});
@@ -841,6 +841,8 @@
 		controlsPlayPause:      true,
 		//pause on mouse-over
 		pauseOnHover:           true,
+		//pause when controls are used
+		pauseOnControlUsage:    true,
 		//if the active content should be animated too - depending on effect slide
 		animateActive:          true,
 		//start slideshow automatically on init
