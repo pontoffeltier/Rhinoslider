@@ -6,6 +6,6 @@
   "author" : ["René Maas <rene@rhinoslider.com>", "Sebastian Pontow <sebastian@rhinoslider.com>"],
   "contributors" : [],
   "dependencies" : ["jQuery"],
-  "repository" : {"type": "git", "url": "dependencies"},
+  "repository" : {"type": "git", "url": "https://github.com/rhinoslider/Rhinoslider.git"},
   "version" : "1.05"
 }
