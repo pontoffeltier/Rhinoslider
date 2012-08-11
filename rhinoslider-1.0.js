@@ -1,11 +1,11 @@
 /**
-  * Rhinoslider 1.0
-  * http://rhinoslider.com/
-  *
-  * Copyright 2012: Sebastian Pontow, Rene Maas (http://renemaas.de/)
-  * Dual licensed under the MIT or GPL Version 2 licenses.
-  * http://rhinoslider.com/license/
-  */
+ * Rhinoslider 1.0
+ * rhinoslider.com/rhinoslider
+ *
+ * Copyright 2012: Sebastian Pontow, René Maas <renemaas.de>
+ * Dual licensed under the MIT or GPL Version 2 licenses.
+ * rhinoslider.com/license
+ */
 (function ($, window, undefined) {
 
 	$.extend($.easing, {
