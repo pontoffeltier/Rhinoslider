@@ -36,24 +36,25 @@
 			features = $.fn.rhinoslider.features
 
 		//internal variables
-		vars = {
-			isPlaying:        false,
-			intervalAutoPlay: false,
-			durationAutoPlay: 0,
-			active:           '',
-			next:             '',
-			container:        '',
-			items:            '',
-			hoverImages:      '',
-			buttons:          [],
-			prefix:           'rhino-',
-			playedArray:      [],
-			playedCounter:    0,
-			original:         element,
-			orgCSS:           [],
-			aspectRatio:      1,
-			version:          1.1
-		}
+			vars = {
+				isPlaying:        false,
+				intervalAutoPlay: false,
+				durationAutoPlay: 0,
+				bulletWidth:      0,
+				active:           '',
+				next:             '',
+				container:        '',
+				items:            '',
+				hoverImages:      '',
+				buttons:          [],
+				prefix:           'rhino-',
+				playedArray:      [],
+				playedCounter:    0,
+				original:         element,
+				orgCSS:           [],
+				aspectRatio:      1,
+				version:          1.1
+			}
 		;
 
 		//store original settings for reload
@@ -64,13 +65,13 @@
 		var
 			setUpSettings = function ($slider, settings) {
 				//bool
-				var tmpValues = ['controlsPrevNext', 'controlsKeyboard', 'controlsMousewheel', 'controlsPlayPause', 'pauseOnHover', 'animateActive', 'autoPlay', 'cycled', 'consoleLog', 'pauseOnControlUsage'];
+				var tmpValues = ['controlsPrevNext', 'globalControlsKeyboard', 'controlsPlayPause', 'pauseOnHover', 'animateActive', 'autoPlay', 'cycled', 'consoleLog', 'pauseOnControlUsage'];
 				$.each(tmpValues, function (i, key) {
 					settings[key] = String(settings[key]) === 'true' ? true : false;
 				});
 
 				//int
-				tmpValues = ['showTime', 'controlFadeTime', 'effectTime', 'captionsFadeTime', 'slideToStart'];
+				tmpValues = ['showTime', 'controlFadeTime', 'effectTime', 'captionsFadeTime', 'slideToStart', 'maxBullets'];
 				$.each(tmpValues, function (i, key) {
 					settings[key] = ((key === 'effectTime' && settings.effect === 'none') || (key === 'captionsFadeTime' && settings['showCaptions'] === 'never')) ? 0 : parseInt(settings[key], 10);
 				});
@@ -150,7 +151,7 @@
 
 					//add functionality to the "prev"-button
 					vars.buttons.prev.click(function () {
-						prev($slider, settings);
+						transition($slider, settings, 'prev');
 
 						//stop autoplay, if set
 						if (vars.isPlaying && settings.pauseOnControlUsage) {
@@ -164,7 +165,7 @@
 
 					//add functionality to the "next"-button
 					vars.buttons.next.click(function () {
-						next($slider, settings);
+						transition($slider, settings, 'next');
 
 						//stop autoplay, if set
 						if (vars.isPlaying && settings.pauseOnControlUsage) {
@@ -282,53 +283,73 @@
 				//generate navigation
 				if (settings.showBullets !== 'never') {
 					vars.container.addClass(vars.prefix + 'show-bullets bullets-' + settings.bulletType);
-					var navi = '<ol class="' + vars.prefix + 'bullets">', thumbWidth = parseInt(vars.container.width() / vars.items.length, 10), thumbHeight = maxThumbHeight = 0, imageHoverOpacity = 0.5;
-					if (settings.bulletType == 'hoverImage') {
-						vars.container.append('<div class="' + vars.prefix + 'hover-images"></div>');
-						vars.hoverImages = vars.container.find('.' + vars.prefix + 'hover-images');
-						thumbWidth = vars.hoverImages.width();
+					var
+						navi = {prefix: '<div class="' + vars.prefix + 'bullets">', listStart: '<div><ol>', listEnd: '</ol></div>', suffix: '</div>', items: [], prevButtons: '', nextButtons: ''},
+						arrows = {prev: '&lt;', next: '&gt;', first: '&laquo;', last: '&raquo;'},
+						thumbWidth = parseInt(vars.container.width() / settings.maxBullets, 10),
+						thumbHeight = maxThumbHeight = tmpWidth = 0, imageHoverOpacity = 0.5,
+						itemIndex = ['first', 'prev', 'next', 'last'],
+						visibleBullets = settings.maxBullets > vars.items.length ? vars.items.length : settings.maxBullets;
+					;
+					
+					//add arrows for too many items
+					if(settings.bulletType != 'image' && vars.items.length > settings.maxBullets){
+						navi.prevButtons = navi.nextButtons = '';
+						for(key in itemIndex){
+							var naviKey = key < 2 ? 'prevButtons' : 'nextButtons';
+							navi[naviKey] += '<a data-' + vars.prefix + 'rel="' + vars.prefix + 'item-' + itemIndex[key] + '" class="' + vars.prefix + 'bullet ' + vars.prefix + 'bullet-' + itemIndex[key] + ' ' + vars.prefix + 'bullet-control">' + arrows[itemIndex[key]]+ '</a>';
+						}
 					}
+					
 					vars.items.each(function (i, element) {
 						var $item = $(element), rel = vars.prefix + 'item' + i, index = parseInt(i + 1, 10), bulletContent;
 						bulletContent = index;
+						
+						//when images are used, append them
 						if (settings.bulletType != 'number') {
 							var $img = $item.find('img:first'), src;
 							src = $img.attr('src') != undefined ? $img.attr('src') : settings.noImage;
+
 							thumbHeight = parseInt(thumbWidth / vars.aspectRatio, 10);
 							maxThumbHeight = thumbHeight > maxThumbHeight ? thumbHeight : maxThumbHeight;
 							bulletContent = '<img src="' + src + '" width="' + thumbWidth + '" height="' + thumbHeight + '" data-' + vars.prefix + 'rel="' + rel + '" />';
 							bulletContent = settings.bulletType == 'hoverImage' ? index + ' ' + bulletContent : bulletContent;
 						}
-						navi = navi + '<li><a data-' + vars.prefix + 'rel="' + rel + '" class="' + vars.prefix + 'bullet">' + bulletContent + '</a></li>';
+						navi.items.push('<li><a data-' + vars.prefix + 'rel="' + rel + '" class="' + vars.prefix + 'bullet">' + bulletContent + '</a></li>');
 					});
-					navi = navi + '</ol>';
-					vars.container.append(navi);
-
-					vars.navigation = vars.container.find('.' + vars.prefix + 'bullets');
+					
+					vars.container.append(navi.prefix+navi.prevButtons+navi.listStart+navi.items.join('')+navi.listEnd+navi.nextButtons+navi.suffix);
+					vars.navigationContainer = vars.container.find('.' + vars.prefix + 'bullets');
+					vars.navigation = vars.navigationContainer.find('ol');
 					vars.buttons.bullets = vars.navigation.find('.' + vars.prefix + 'bullet');
-					vars.container.find('[data-' + vars.prefix + 'rel=' + vars.active.attr('data-' + vars.prefix + 'item') + ']').addClass(vars.prefix + 'active-bullet');
-					vars.buttons.bullets.first().addClass(vars.prefix + 'first-bullet');
-					vars.buttons.bullets.last().addClass(vars.prefix + 'last-bullet');
-					vars.buttons.bullets.click(function () {
-						var itemID = $(this).attr('data-' + vars.prefix + 'rel');
-						var $next = vars.container.find('[data-' + vars.prefix + 'item=' + itemID + ']');
-						var curID = parseInt(vars.navigation.find('.' + vars.prefix + 'active-bullet').attr('data-' + vars.prefix + 'rel').replace(vars.prefix + 'item', ''), 10);
-						var nextID = parseInt(itemID.replace(vars.prefix + 'item', ''), 10);
-						if (curID < nextID) {
-							next($slider, settings, $next);
-						} else if (curID > nextID) {
-							prev($slider, settings, $next);
-						} else {
-							return false;
-						}
-
-						//stop autoplay, if set
-						if (vars.isPlaying && settings.pauseOnControlUsage) {
-							pause();
-						}
-					});
+					vars.buttons.bulletControls = vars.navigationContainer.find('.' + vars.prefix + 'bullet-control');
+					
+					vars.bulletWidth = vars.buttons.bullets.last().outerWidth();
+					
+					
+					if(settings.bulletType != 'image'){
+						//center bullets
+						vars.navigation.css('width', vars.buttons.bullets.length * vars.bulletWidth);
+						tmpWidth = visibleBullets * vars.bulletWidth;
+						vars.navigation.parent().css({
+							width: tmpWidth,
+							marginLeft: -tmpWidth / 2
+						});
+						tmpWidth = (visibleBullets + vars.buttons.bulletControls.length) * vars.bulletWidth;
+						vars.navigationContainer.css({
+							width: tmpWidth,
+							marginLeft: -tmpWidth / 2
+						});
+					}
+					
 					if (settings.bulletType == 'hoverImage') {
 						var hoverImagesIsOpen = false, hoverImagesTimeout, activeClass = vars.prefix + 'active-image';
+	
+						//add container for images
+						vars.container.append('<div class="' + vars.prefix + 'hover-images"></div>');
+						vars.hoverImages = vars.container.find('.' + vars.prefix + 'hover-images');
+						thumbWidth = vars.hoverImages.width();
+
 						vars.hoverImages.css('height', maxThumbHeight);
 						vars.buttons.bullets
 							.each(function (i, element) {
@@ -340,49 +361,114 @@
 								var
 									$img = vars.hoverImages.find('[data-' + vars.prefix + 'rel=' + $this.attr('data-' + vars.prefix + 'rel') + ']'),
 									$active = vars.hoverImages.find('.' + activeClass),
-									left = vars.navigation.position().left + parseInt(vars.navigation.css('margin-left'), 10) - (vars.hoverImages.outerWidth(true) * 0.5) + $this.position().left + ($this.outerWidth() * 0.5)
-									;
-								vars.hoverImages.css('top', vars.navigation.position().top - vars.hoverImages.height() - 10).find('img').not($img).css('z-index', 0);
+									left = vars.navigationContainer.position().left + parseInt(vars.navigationContainer.css('margin-left'), 10) - (vars.hoverImages.outerWidth(true) * 0.5) + $this.position().left + ($this.outerWidth() * 0.5) + (2 * vars.bulletWidth)
+								;
+								vars.hoverImages.css('top', vars.navigationContainer.position().top - vars.hoverImages.height() - 10).find('img').not($img).css('z-index', 0);
 								$active.css('z-index', 1).stop(true, true).removeClass(activeClass);
-								$img.addClass(activeClass).css({zIndex: 2}).stop(true, true).fadeIn((hoverImagesIsOpen ? 300 : 0), function () {
+								$img.addClass(activeClass).css({zIndex: 2}).stop(true, true).fadeIn((hoverImagesIsOpen ? settings.controlFadeTime : 0), function () {
 									$active.css({display: 'none', zIndex: 0});
 									$img.css('z-index', 1);
 								});
-								vars.hoverImages.stop(true, false).animate({opacity: 1, left: left}, 150);
+								vars.hoverImages.stop(true, false).animate({opacity: 1, left: left}, settings.controlFadeTime / 2);
 							})
 						;
 						vars.navigation
 							.mouseenter(function () {
-								vars.hoverImages.css('left', vars.navigation.position().left + parseInt(vars.navigation.css('margin-left'), 10) - (vars.hoverImages.outerWidth(true) * 0.5)).stop(true, true).fadeIn(150);
+								vars.hoverImages.css('left', vars.navigationContainer.position().left + parseInt(vars.navigationContainer.css('margin-left'), 10) - (vars.hoverImages.outerWidth(true) * 0.5)).stop(true, true).fadeIn(settings.controlFadeTime / 2);
 								hoverImagesIsOpen = true;
 							})
 							.mouseleave(function () {
 								hoverImagesTimeout = setTimeout(function () {
 									clearTimeout(hoverImagesTimeout);
 									hoverImagesIsOpen = false;
-									vars.hoverImages.stop(true, true).fadeOut(150);
-								}, 300);
+									vars.hoverImages.stop(true, true).fadeOut(settings.controlFadeTime / 2);
+								}, settings.controlFadeTime);
 							})
 						;
 					} else if (settings.bulletType == 'image') {
-						vars.container.delegate('.' + vars.prefix + 'bullets', 'setSize', function () {
-							var thumbWidth = parseInt(vars.container.width() / vars.items.length, 10);
+						vars.navigation.css('width', vars.buttons.bullets.length * vars.bulletWidth);
+
+						vars.navigation.parent().css('height', maxThumbHeight);
+						vars.navigationContainer.css('height', maxThumbHeight);
+						
+						//on resize
+						vars.container.on('setSize', '.' + vars.prefix + 'bullets', function () {
+							var thumbWidth = parseInt(vars.container.width() / visibleBullets, 10), thumbHeight, navWidth;
+							thumbHeight = thumbWidth / vars.aspectRatio;
+							navWidth = vars.buttons.bullets.length * thumbWidth;
+							vars.navigation.css('width', navWidth);
+							
+							vars.navigation.parent().css('height', thumbHeight);
+							vars.navigationContainer.css('height', thumbHeight);
+							
 							vars.buttons.bullets.each(function (i, element) {
-								$(element).find('img').attr({width: thumbWidth, height: thumbWidth / vars.aspectRatio});
+								$(element).find('img').attr({width: thumbWidth, height: thumbHeight});
 							});
-							vars.buttons.prev.css('bottom', -vars.navigation.height());
-							vars.buttons.next.css('bottom', -vars.navigation.height());
+							vars.buttons.prev.css('bottom', -vars.navigationContainer.height());
+							vars.buttons.next.css('bottom', -vars.navigationContainer.height());
+							vars.bulletWidth = thumbWidth;
+							
+							//animate
+							marginLeft = -Math.abs(vars.active.attr('data-' + vars.prefix + 'item').replace(vars.prefix + 'item', '') * vars.bulletWidth) + (parseInt(settings.maxBullets / 2, 10) * vars.bulletWidth);
+							marginLeft = marginLeft >= 0 ? 0 : Math.abs(marginLeft) >= navWidth ?  -navWidth : marginLeft;
+							vars.navigation.stop(true, true).animate({marginLeft: marginLeft}, settings.controlsFadeTime);
+							
+							$slider.data('rhinoslider:vars', vars);
 						});
+						
 						vars.buttons.bullets
 							.fadeTo(0, imageHoverOpacity)
 							.mouseenter(function () {
-								$(this).stop(true, true).fadeTo(150, 1);
+								$(this).stop(true, true).fadeTo(settings.controlFadeTime / 2, 1);
 							})
 							.mouseleave(function () {
-								$(this).stop(true, true).fadeTo(150, imageHoverOpacity);
+								$(this).stop(true, true).fadeTo(settings.controlFadeTime / 2, imageHoverOpacity);
 							})
 						;
 					}
+					
+					//set classes and variables
+					vars.container.find('[data-' + vars.prefix + 'rel=' + vars.active.attr('data-' + vars.prefix + 'item') + ']').addClass(vars.prefix + 'active-bullet');
+					vars.buttons.bullets.first().addClass(vars.prefix + 'first-bullet');
+					vars.buttons.bullets.last().addClass(vars.prefix + 'last-bullet');
+					
+					//add functionality
+					vars.buttons.bullets.click(function () {
+						var itemID = $(this).attr('data-' + vars.prefix + 'rel');
+						var
+							$next = vars.container.find('[data-' + vars.prefix + 'item=' + itemID + ']'),
+							curID = parseInt(vars.navigation.find('.' + vars.prefix + 'active-bullet').attr('data-' + vars.prefix + 'rel').replace(vars.prefix + 'item', ''), 10),
+							nextID = parseInt(itemID.replace(vars.prefix + 'item', ''), 10),
+							type;
+						;
+						type = curID < nextID ? 'next' : curID > nextID ? 'prev' : false;
+						if(!type){
+							return false;
+						}
+						transition($slider, settings, type, $next);
+
+						//stop autoplay, if set
+						if (vars.isPlaying && settings.pauseOnControlUsage) {
+							pause();
+						}
+					});
+					
+					vars.buttons.bulletControls.click(function(){
+						var itemID = $(this).attr('data-' + vars.prefix + 'rel');
+						
+						type = (itemID == vars.prefix + 'item-first' || itemID == vars.prefix + 'item-prev') ? 'prev' : 'next';						
+						$next = itemID == vars.prefix + 'item-first' ? vars.items.first() : (itemID == vars.prefix + 'item-last' ? vars.items.last() : false);
+
+						transition($slider, settings, type, $next);
+						//stop autoplay, if set
+						if (vars.isPlaying && settings.pauseOnControlUsage) {
+							pause();
+						}
+						//stop progressbar, if is included
+						if (features['progressbar'] != undefined) {
+							vars.container.find('.' + vars.prefix + 'progressbar').trigger('stop');
+						}
+					});
 				}
 				//hide/show bullets on hover or never
 				if (settings.showBullets === 'hover') {
@@ -559,7 +645,7 @@
 				var vars = $slider.data('rhinoslider:vars');
 				consoleLog($slider.attr('id'));
 				vars.intervalAutoPlay = setInterval(function () {
-					next($slider, settings);
+					transition($slider, settings, 'next');
 				}, vars.durationAutoPlay);
 				vars.isPlaying = true;
 				if (settings.controlsPlayPause) {
@@ -574,77 +660,76 @@
 				settings.callBackPlay($slider, settings, vars);
 			},
 
-			prev = function ($slider, settings, $next) {
+		//prev/next function
+			transition = function ($slider, settings, type, $next) {
 				var vars = $slider.data('rhinoslider:vars'), effect = getRandom(settings.effect);
 
-				//if some effect is already running, don't stack up another one
-				if ((!settings.cycled && isFirst(vars.active)) || vars.container.hasClass('inProgress')) {
+				if (vars.container.hasClass('inProgress') || (!settings.cycled && (type == 'prev' && isFirst(vars.active) || type == 'next' && isLast(vars.active))) || (type != 'prev' && type != 'next')) {
 					return false;
 				}
-				settings.callBeforePrev($slider, settings, vars);
-
 				vars.container.addClass('inProgress');
-
-				//check, if the active element is the first, so we can set the last element to be the "prev"-element
+				
+				if(type == 'prev'){
+					settings.callBeforePrev($slider, settings, vars);
+				}else{
+					settings.callBeforeNext($slider, settings, vars);
+				}
+				
+				//check, if the active element is the first/last, so we can set the last/first element to be the "next"-element
 				if (!$next) {
 					if (settings.randomOrder) {
 						var nextID = getRandomItem(vars);
 						vars.next = vars.container.find('[data-' + vars.prefix + 'item]' + nextID);
 					} else {
-						vars.next = vars.items.first().hasClass(vars.prefix + 'active') ? vars.items.last() : vars.active.prev();
+						vars.next = type == 'prev' ? (vars.items.first().hasClass(vars.prefix + 'active') ? vars.items.last() : vars.active.prev()) : (vars.items.last().hasClass(vars.prefix + 'active') ? vars.items.first() : vars.active.next());
 					}
 				} else {
 					vars.next = $next;
 				}
-
+			
 				if (vars.next.hasClass(vars.prefix + 'active')) {
 					return false;
 				}
-
+			
 				vars.next.addClass(vars.prefix + 'next-item');
-
+			
 				//check for random effect
 				if (preparations[effect] == undefined) {
 					consoleLog('Preparations for ' + effect + ' not found.');
 				} else {
 					preparations[effect]($slider, settings, vars);
 				}
-
+			
 				//hide captions
 				if (settings.showCaptions !== 'never') {
 					vars.active.find('.' + vars.prefix + 'caption').stop(true, true).fadeOut(settings.captionsFadeTime);
 				}
-
-				if (settings.showBullets !== 'never' && settings.changeBullets == 'before') {
-					vars.navigation.find('.' + vars.prefix + 'active-bullet').removeClass(vars.prefix + 'active-bullet');
-					vars.navigation.find('[data-' + vars.prefix + 'rel=' + vars.next.attr('data-' + vars.prefix + 'item') + ']').addClass(vars.prefix + 'active-bullet');
-				}
-
+			
+				//change navigation, checks for before/after itselt
+				changeNavigation($slider, settings, type, vars.next.attr('data-' + vars.prefix + 'item'));
+				
 				setTimeout(function () {
 					var params = [];
 					params.settings = settings;
 					params.animateActive = settings.animateActive;
-
+			
 					//getDirection
-					params.direction = getRandom(settings.slidePrevDirection);
-
+					params.direction = getRandom(settings[type == 'prev' ? 'slidePrevDirection' : 'slideNextDirection']);
+			
 					//run effect
 					if (effects[effect] == undefined) {
 						consoleLog('Effect ' + effect + ' not found.');
 					} else {
-						consoleLog('Start prev() with ' + effect + ' and element ' + vars.next.attr('data-' + vars.prefix + 'item'));
+						consoleLog('Start transition['+type+']() with ' + effect + ' and element ' + vars.next.attr('data-' + vars.prefix + 'item'));
 						effects[effect]($slider, params);
 					}
-					if (features['progressbar'] != undefined) {
+					
+					if (type == 'prev' && features['progressbar'] != undefined) {
 						vars.container.find('.progressbar').trigger('start');
 					}
-
+					
 					setTimeout(function () {
-						if (settings.showBullets !== 'never' && settings.changeBullets == 'after') {
-							vars.navigation.find('.' + vars.prefix + 'active-bullet').removeClass(vars.prefix + 'active-bullet');
-							vars.navigation.find('[data-' + vars.prefix + 'rel=' + vars.next.attr('data-' + vars.prefix + 'item') + ']').addClass(vars.prefix + 'active-bullet');
-						}
-						settings.callBackPrev($slider, settings, vars);
+						settings[type == 'prev' ? 'callBackPrev' : 'callBackNext']($slider, settings, vars);
 						vars.container.removeClass('inProgress');
 						//start progressbar, if is included
 						if (vars.isPlaying && features['progressbar'] != undefined) {
@@ -653,82 +738,27 @@
 					}, settings.effectTime);
 				}, settings.captionsFadeTime);
 			},
-
-			next = function ($slider, settings, $next) {
-				var vars = $slider.data('rhinoslider:vars'), effect = getRandom(settings.effect);
-
-				//if some effect is already running, don't stack up another one
-				if ((!settings.cycled && isLast(vars.active)) || vars.container.hasClass('inProgress')) {
-					return false;
-				}
-				settings.callBeforeNext($slider, settings, vars);
-
-				vars.container.addClass('inProgress');
-
-				//check, if the active element is the last, so we can set the first element to be the "next"-element
-				if (!$next) {
-					if (settings.randomOrder) {
-						var nextID = getRandomItem(vars);
-						vars.next = vars.container.find('[data-' + vars.prefix + 'item]' + nextID);
-					} else {
-						vars.next = vars.items.last().hasClass(vars.prefix + 'active') ? vars.items.first() : vars.active.next();
-					}
-				} else {
-					vars.next = $next;
-				}
-
-				if (vars.next.hasClass(vars.prefix + 'active')) {
-					return false;
-				}
-
-				vars.next.addClass(vars.prefix + 'next-item');
-
-				//check for random effect
-				if (preparations[effect] == undefined) {
-					consoleLog('Preparations for ' + effect + ' not found.');
-				} else {
-					preparations[effect]($slider, settings, vars);
-				}
-
-				//hide captions
-				if (settings.showCaptions !== 'never') {
-					vars.active.find('.' + vars.prefix + 'caption').stop(true, true).fadeOut(settings.captionsFadeTime);
-				}
-
-				if (settings.showBullets !== 'never' && settings.changeBullets == 'before') {
+			
+		//change navigation before/after transition
+			changeNavigation = function ($slider, settings, type, nextItemID) {
+				if (settings.showBullets === 'never') {return false;}
+				var
+					vars = $slider.data('rhinoslider:vars'),
+					time = settings.changeBullets == 'after' ? settings.effectTime + settings.captionsFadeTime : 0,
+					curLeft = parseInt(vars.navigation.css('margin-left'), 10),
+					navWidth = vars.navigation.width() - vars.navigation.parent().outerWidth(),
+					nextItemIndex = nextItemID.replace(vars.prefix + 'item', '');
+				;
+				setTimeout(function(){
 					vars.navigation.find('.' + vars.prefix + 'active-bullet').removeClass(vars.prefix + 'active-bullet');
 					vars.navigation.find('[data-' + vars.prefix + 'rel=' + vars.next.attr('data-' + vars.prefix + 'item') + ']').addClass(vars.prefix + 'active-bullet');
-				}
+					
+					//animate
+					marginLeft = -Math.abs(nextItemIndex * vars.bulletWidth) + (parseInt(settings.maxBullets / 2, 10) * vars.bulletWidth);
 
-				setTimeout(function () {
-					var params = [];
-					params.settings = settings;
-					params.animateActive = settings.animateActive;
-
-					//getDirection
-					params.direction = getRandom(settings.slideNextDirection);
-
-					//run effect
-					if (effects[effect] == undefined) {
-						consoleLog('Effect ' + effect + ' not found.');
-					} else {
-						consoleLog('Start next() with ' + effect + ' and element ' + vars.next.attr('data-' + vars.prefix + 'item'));
-						effects[effect]($slider, params);
-					}
-
-					setTimeout(function () {
-						if (settings.showBullets !== 'never' && settings.changeBullets == 'after') {
-							vars.navigation.find('.' + vars.prefix + 'active-bullet').removeClass(vars.prefix + 'active-bullet');
-							vars.navigation.find('[data-' + vars.prefix + 'rel=' + vars.next.attr('data-' + vars.prefix + 'item') + ']').addClass(vars.prefix + 'active-bullet');
-						}
-						settings.callBackNext($slider, settings, vars);
-						vars.container.removeClass('inProgress');
-						//start progressbar, if is included
-						if (vars.isPlaying && features['progressbar'] != undefined) {
-							vars.container.find('.' + vars.prefix + 'progressbar').trigger('start', [vars.durationAutoPlay - settings.effectTime]);
-						}
-					}, settings.effectTime);
-				}, settings.captionsFadeTime);
+					marginLeft = marginLeft >= 0 ? 0 : Math.abs(marginLeft) >= navWidth ?  -navWidth : marginLeft;
+					vars.navigation.animate({marginLeft: marginLeft}, settings.controlsFadeTime);
+				}, time);
 			},
 
 		//get random itemID
@@ -770,10 +800,10 @@
 			toggle();
 		};
 		this.prev = function ($next) {
-			prev($slider, settings, $next);
+			transition($slider, settings, 'prev', $next);
 		};
 		this.next = function ($next) {
-			next($slider, settings, $next);
+			transition($slider, settings, 'next', $next);
 		};
 		this.debug = function () { // @did removed param dontLog, cause it was unused
 			console.log('Rhinoslider v' + vars.version);
@@ -881,6 +911,8 @@
 		slideToStart:           0,
 		//time, progressbar fades out
 		progressbarFadeTime:    300,
+		//maximum of bullets visible at a time
+		maxBullets:             5,
 		//width, the animation for moving the content needs, can be comma-seperated string (x,y) or int if both are the same
 		shiftValue:             '150',
 		//amount of parts per line for shuffle effect
@@ -1300,8 +1332,6 @@
 					var partValues = [];
 					partValues.width = vars.next.width() / settings.parts.x;
 					partValues.height = vars.next.height() / settings.parts.y;
-					console.log(vars.next.height());
-					console.log(partValues.height);
 					if (settings.animateActive) {
 						$activeParts.each(function (i, element) {
 							$element = $(element);
@@ -1429,8 +1459,8 @@
 					settings.parts.x = settings.parts.x < 1 ? 1 : settings.parts.x;
 					settings.parts.y = settings.parts.y < 1 ? 1 : settings.parts.y;
 					settings.parts = calcParts(settings.parts, true);
-					settings.shiftValue.x = settings.shiftValue.x < 0 ? settings.shiftValue.x * -1 : settings.shiftValue.x;
-					settings.shiftValue.y = settings.shiftValue.y < 0 ? settings.shiftValue.y * -1 : settings.shiftValue.y;
+					settings.shiftValue.x = Math.abs(settings.shiftValue.x);
+					settings.shiftValue.y = Math.abs(settings.shiftValue.y);
 					var
 						activeContent = vars.active.html(),
 						nextContent = vars.next.html(),
@@ -2003,17 +2033,12 @@
 					startCoords = [];
 					$slider.data('rhinoslider').pause();
 				}
-				;
-			$('[data-rhino-id=' + vars.container.attr('data-rhino-id') + ']').delegate('#' + $slider.attr('id'), 'touchstart', start);
-			$('[data-rhino-id=' + vars.container.attr('data-rhino-id') + ']').delegate('#' + $slider.attr('id'), 'touchmove', move);
-
-			$('[data-rhino-id=' + vars.container.attr('data-rhino-id') + ']').delegate('#' + $slider.attr('id'), 'mousedown', start);
-			$('[data-rhino-id=' + vars.container.attr('data-rhino-id') + ']').delegate('#' + $slider.attr('id'), 'mouseup', move);
-			/*			$slider.get(0).addEventListener('touchstart', start, false);
-			 $slider.get(0).addEventListener('touchmove', move, false);
-
-			 $slider.get(0).addEventListener('mousedown', start, false);
-			 $slider.get(0).addEventListener('mouseup', move, false);*/
+			;
+		
+			$slider.get(0).addEventListener('touchstart', start, false);		
+			$slider.get(0).addEventListener('touchmove', move, false);
+			$slider.get(0).addEventListener('mousedown', start, false);		
+			$slider.get(0).addEventListener('mousemove', move, false);
 		},
 		resize:             function ($slider, settings) {
 			var vars = $slider.data('rhinoslider:vars');
@@ -2057,7 +2082,7 @@
 			resetCSS.display = 'block';
 
 			vars.container
-				.delegate(' .' + vars.prefix + 'progressbar', 'start', function (e, duration) {
+				.on('start', '.' + vars.prefix + 'progressbar', function (e, duration) {
 					animateCSS = (dir == 'toTop' || dir == 'toBottom') ? {height: $slider.height()} : {width: $slider.width()};
 					$pBar.stop(true, true).css(resetCSS).animate(animateCSS, (duration - settings.progressbarFadeTime), 'linear', function () {
 						$pBar.stop(true, true).fadeOut(settings.progressbarFadeTime, function () {
@@ -2065,7 +2090,7 @@
 						});
 					});
 				})
-				.delegate('.' + vars.prefix + 'progressbar', 'stop', function (e) {
+				.on('stop', '.' + vars.prefix + 'progressbar', function (e) {
 					clearInterval(pBarInterval);
 					$pBar.stop(true, false).fadeOut(settings.progressbarFadeTime, function () {
 						$pBar.css(resetCSS);
