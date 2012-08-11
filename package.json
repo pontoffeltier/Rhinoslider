@@ -1,0 +1,11 @@
+{
+  "name" : "Rhinoslider",
+  "description" : "The most flexible jQuery slider/slideshow",
+  "homepage" : "http://rhinoslider.com/",
+  "keywords" : ["slider", "slideshow", "jQuery"],
+  "author" : ["René Maas <rene@rhinoslider.com>", "Sebastian Pontow <sebastian@rhinoslider.com>"],
+  "contributors" : [],
+  "dependencies" : ["jQuery"],
+  "repository" : {"type": "git", "url": "dependencies"},
+  "version" : "1.05"
+}
