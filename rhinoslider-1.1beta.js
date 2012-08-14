@@ -38,7 +38,7 @@
 		//internal variables
 			vars = {
 				isPlaying:        false,
-				intervalAutoPlay: false,
+				hash:             false,
 				durationAutoPlay: 0,
 				bulletWidth:      0,
 				active:           '',
@@ -65,7 +65,7 @@
 		var
 			setUpSettings = function ($slider, settings) {
 				//bool
-				var tmpValues = ['controlsPrevNext', 'globalControlsKeyboard', 'controlsPlayPause', 'pauseOnHover', 'animateActive', 'autoPlay', 'cycled', 'consoleLog', 'pauseOnControlUsage'];
+				var tmpValues = ['controlsPrevNext', 'globalControlsKeyboard', 'controlsPlayPause', 'pauseOnHover', 'forceTransition', 'animateActive', 'autoPlay', 'cycled', 'consoleLog', 'pauseOnControlUsage'];
 				$.each(tmpValues, function (i, key) {
 					settings[key] = String(settings[key]) === 'true' ? true : false;
 				});
@@ -153,13 +153,13 @@
 					vars.buttons.prev.click(function () {
 						transition($slider, settings, 'prev');
 
-						//stop autoplay, if set
-						if (vars.isPlaying && settings.pauseOnControlUsage) {
-							pause();
-						}
-						//stop progressbar, if is included
-						if (features['progressbar'] != undefined) {
-							vars.container.find('.' + vars.prefix + 'progressbar').trigger('stop');
+						if (vars.isPlaying) {
+							if(settings.pauseOnControlUsage){
+								//stop autoplay, if set
+								pause();
+							}else{
+								resetAutoPlay($slider, settings);
+							}
 						}
 					});
 
@@ -167,13 +167,13 @@
 					vars.buttons.next.click(function () {
 						transition($slider, settings, 'next');
 
-						//stop autoplay, if set
-						if (vars.isPlaying && settings.pauseOnControlUsage) {
-							pause();
-						}
-						//stop progressbar, if is included
-						if (features['progressbar'] != undefined) {
-							vars.container.find('.' + vars.prefix + 'progressbar').trigger('stop');
+						if (vars.isPlaying) {
+							if(settings.pauseOnControlUsage){
+								//stop autoplay, if set
+								pause();
+							}else{
+								resetAutoPlay($slider, settings);
+							}
 						}
 					});
 				}
@@ -277,6 +277,8 @@
 					$(element).attr('data-' + vars.prefix + 'item', vars.prefix + 'item' + i);
 				});
 
+				//add vars to data for use in features.hash
+				$slider.data('rhinoslider:vars', vars);
 				//set active element
 				vars.active = getActive(vars, settings);
 
@@ -299,6 +301,16 @@
 							var naviKey = key < 2 ? 'prevButtons' : 'nextButtons';
 							navi[naviKey] += '<a data-' + vars.prefix + 'rel="' + vars.prefix + 'item-' + itemIndex[key] + '" class="' + vars.prefix + 'bullet ' + vars.prefix + 'bullet-' + itemIndex[key] + ' ' + vars.prefix + 'bullet-control">' + arrows[itemIndex[key]]+ '</a>';
 						}
+					}
+					
+					
+					if (settings.bulletType == 'hoverImage') {
+						var hoverImagesIsOpen = false, hoverImagesTimeout, activeClass = vars.prefix + 'active-image';
+	
+						//add container for images
+						vars.container.append('<div class="' + vars.prefix + 'hover-images"></div>');
+						vars.hoverImages = vars.container.find('.' + vars.prefix + 'hover-images');
+						thumbWidth = vars.hoverImages.width();
 					}
 					
 					vars.items.each(function (i, element) {
@@ -343,11 +355,6 @@
 					}
 					
 					if (settings.bulletType == 'hoverImage') {
-						var hoverImagesIsOpen = false, hoverImagesTimeout, activeClass = vars.prefix + 'active-image';
-	
-						//add container for images
-						vars.container.append('<div class="' + vars.prefix + 'hover-images"></div>');
-						vars.hoverImages = vars.container.find('.' + vars.prefix + 'hover-images');
 						thumbWidth = vars.hoverImages.width();
 
 						vars.hoverImages.css('height', maxThumbHeight);
@@ -366,8 +373,10 @@
 								vars.hoverImages.css('top', vars.navigationContainer.position().top - vars.hoverImages.height() - 10).find('img').not($img).css('z-index', 0);
 								$active.css('z-index', 1).stop(true, true).removeClass(activeClass);
 								$img.addClass(activeClass).css({zIndex: 2}).stop(true, true).fadeIn((hoverImagesIsOpen ? settings.controlFadeTime : 0), function () {
-									$active.css({display: 'none', zIndex: 0});
-									$img.css('z-index', 1);
+									if($img.attr('data-' + vars.prefix + 'rel') != $active.attr('data-' + vars.prefix + 'rel')){
+										$active.css({display: 'none', zIndex: 0});
+										$img.css('z-index', 1);
+									}								
 								});
 								vars.hoverImages.stop(true, false).animate({opacity: 1, left: left}, settings.controlFadeTime / 2);
 							})
@@ -447,9 +456,13 @@
 						}
 						transition($slider, settings, type, $next);
 
-						//stop autoplay, if set
-						if (vars.isPlaying && settings.pauseOnControlUsage) {
-							pause();
+						if (vars.isPlaying) {
+							if(settings.pauseOnControlUsage){
+								//stop autoplay, if set
+								pause();
+							}else{
+								resetAutoPlay($slider, settings);
+							}
 						}
 					});
 					
@@ -460,13 +473,14 @@
 						$next = itemID == vars.prefix + 'item-first' ? vars.items.first() : (itemID == vars.prefix + 'item-last' ? vars.items.last() : false);
 
 						transition($slider, settings, type, $next);
-						//stop autoplay, if set
-						if (vars.isPlaying && settings.pauseOnControlUsage) {
-							pause();
-						}
-						//stop progressbar, if is included
-						if (features['progressbar'] != undefined) {
-							vars.container.find('.' + vars.prefix + 'progressbar').trigger('stop');
+						
+						if (vars.isPlaying) {
+							if(settings.pauseOnControlUsage){
+								//stop autoplay, if set
+								pause();
+							}else{
+								resetAutoPlay($slider, settings);
+							}
 						}
 					});
 				}
@@ -522,20 +536,15 @@
 					//play/pause function cannot be used for they trigger the isPlaying variable
 					$slider
 						.mouseenter(function () {
-							if (vars.isPlaying) {
-								clearInterval(vars.intervalAutoPlay);
-								//stop progressbar, if is included
-								if (features['progressbar'] != undefined) {
-									vars.container.find('.' + vars.prefix + 'progressbar').trigger('stop');
-								}
-								if (settings.controlsPlayPause) {
-									vars.buttons.play.text(settings.playText).removeClass(vars.prefix + 'pause').addClass(vars.prefix + 'play');
-								}
+							if(vars.isPlaying){
+								vars.container.addClass(vars.prefix + 'paused');
+								pause();
 							}
 						})
 						.mouseleave(function () {
-							if (vars.isPlaying) {
+							if (vars.container.hasClass(vars.prefix + 'paused')) {
 								play();
+								vars.container.removeClass(vars.prefix + 'paused');
 							}
 						});
 				}
@@ -565,7 +574,7 @@
 					if (vars.active.is(':last-child')) {
 						if (settings.controlsPrevNext) {
 							vars.buttons.next.addClass('disabled');
-							$slider.data('rhinoslider').pause();
+							pause();
 						}
 						if (settings.autoPlay) {
 							vars.buttons.play.addClass('disabled');
@@ -590,12 +599,17 @@
 				settings.callBackInit($slider, settings, vars);
 			},
 
+		//get active item on init
 			getActive = function (vars, settings) {
-				vars.items.each(function (key, element) {
-					if (key == settings.slideToStart) {
-						$(element).addClass(vars.prefix + 'active');
-					}
-				});
+				if(features.hash != null){
+					vars.hash = features.hash($slider, settings);
+				}else{
+					vars.items.each(function (key, element) {
+						if (key == settings.slideToStart) {
+							$(element).addClass(vars.prefix + 'active');
+						}
+					});
+				}
 				var $active = $slider.find('.' + vars.prefix + 'active');
 				$active.css({
 					zIndex:  1,
@@ -608,7 +622,7 @@
 
 			consoleLog = function (msg) {
 				if (settings.consoleLog && typeof (console) !== 'undefined' && console != null) {
-					console.log(msg);
+					console.log('Rhinoslider: ' + msg);
 				} else {
 					return false;
 				}
@@ -627,7 +641,8 @@
 		//pause the autoplay and change the bg-image of the button to "play"
 			pause = function () {
 				var vars = $slider.data('rhinoslider:vars');
-				clearInterval(vars.intervalAutoPlay);
+				clearInterval($slider.data('rhinoslider:interval'));
+				$slider.data('rhinoslider:interval', null);
 				vars.isPlaying = false;
 				if (settings.controlsPlayPause) {
 					vars.buttons.play.text(settings.playText).removeClass(vars.prefix + 'pause').addClass(vars.prefix + 'play');
@@ -643,10 +658,17 @@
 		//start/resume the autoplay and change the bg-image of the button to "pause"
 			play = function () {
 				var vars = $slider.data('rhinoslider:vars');
-				consoleLog($slider.attr('id'));
-				vars.intervalAutoPlay = setInterval(function () {
-					transition($slider, settings, 'next');
+				if($slider.data('rhinoslider:interval') !== null){
+					clearInterval($slider.data('rhinoslider:interval'));
+				}
+				intervalAutoPlay = setInterval(function () {
+					if(vars.isPlaying && !vars.container.hasClass(vars.prefix + 'paused')){
+						transition($slider, settings, 'next');
+					}else{
+						pause();
+					}
 				}, vars.durationAutoPlay);
+				$slider.data('rhinoslider:interval', intervalAutoPlay);
 				vars.isPlaying = true;
 				if (settings.controlsPlayPause) {
 					vars.buttons.play.text(settings.pauseText).removeClass(vars.prefix + 'play').addClass(vars.prefix + 'pause');
@@ -659,15 +681,21 @@
 
 				settings.callBackPlay($slider, settings, vars);
 			},
+			
+		//reset interval for autoplay
+			resetAutoPlay = function ($slider, settings) {
+				pause();
+				setTimeout(function(){
+					play();
+				}, settings.effectTime + settings.progressbarFadeTime);
+			},
 
 		//prev/next function
 			transition = function ($slider, settings, type, $next) {
-				var vars = $slider.data('rhinoslider:vars'), effect = getRandom(settings.effect);
-
-				if (vars.container.hasClass('inProgress') || (!settings.cycled && (type == 'prev' && isFirst(vars.active) || type == 'next' && isLast(vars.active))) || (type != 'prev' && type != 'next')) {
+				var vars = $slider.data('rhinoslider:vars'), effect = getRandom(settings.effect), inProgress = vars.container.hasClass('inProgress');
+				if ((vars.container.hasClass('inProgress')/* && !settings.forceTransition*/) || (!settings.cycled && (type == 'prev' && isFirst(vars.active) || type == 'next' && isLast(vars.active))) || (type != 'prev' && type != 'next')) {
 					return false;
 				}
-				vars.container.addClass('inProgress');
 				
 				if(type == 'prev'){
 					settings.callBeforePrev($slider, settings, vars);
@@ -675,68 +703,75 @@
 					settings.callBeforeNext($slider, settings, vars);
 				}
 				
+				vars.container.addClass('inProgress');
+				
 				//check, if the active element is the first/last, so we can set the last/first element to be the "next"-element
 				if (!$next) {
 					if (settings.randomOrder) {
 						var nextID = getRandomItem(vars);
 						vars.next = vars.container.find('[data-' + vars.prefix + 'item]' + nextID);
 					} else {
-						vars.next = type == 'prev' ? (vars.items.first().hasClass(vars.prefix + 'active') ? vars.items.last() : vars.active.prev()) : (vars.items.last().hasClass(vars.prefix + 'active') ? vars.items.first() : vars.active.next());
+						vars.next = type == 'prev' ? (vars.items.first().attr('data-' + vars.prefix + 'item') == vars.active.attr('data-' + vars.prefix + 'item') ? vars.items.last() : vars.active.prev()) : (vars.items.last().attr('data-' + vars.prefix + 'item') == vars.active.attr('data-' + vars.prefix + 'item') ? vars.items.first() : vars.active.next());
 					}
 				} else {
 					vars.next = $next;
 				}
-			
-				if (vars.next.hasClass(vars.prefix + 'active')) {
-					return false;
-				}
-			
-				vars.next.addClass(vars.prefix + 'next-item');
-			
-				//check for random effect
-				if (preparations[effect] == undefined) {
-					consoleLog('Preparations for ' + effect + ' not found.');
-				} else {
-					preparations[effect]($slider, settings, vars);
-				}
-			
-				//hide captions
-				if (settings.showCaptions !== 'never') {
-					vars.active.find('.' + vars.prefix + 'caption').stop(true, true).fadeOut(settings.captionsFadeTime);
-				}
-			
-				//change navigation, checks for before/after itselt
-				changeNavigation($slider, settings, type, vars.next.attr('data-' + vars.prefix + 'item'));
 				
-				setTimeout(function () {
-					var params = [];
-					params.settings = settings;
-					params.animateActive = settings.animateActive;
-			
-					//getDirection
-					params.direction = getRandom(settings[type == 'prev' ? 'slidePrevDirection' : 'slideNextDirection']);
-			
-					//run effect
-					if (effects[effect] == undefined) {
-						consoleLog('Effect ' + effect + ' not found.');
+				if (vars.next.hasClass(vars.prefix + 'active')) {
+						return false;
+					}
+
+// @todo: animation has to be cleared properly, doesn't work yet...
+			/*	if (inProgress && settings.forceTransition){
+					//clear animation
+					console.log('stop transition');
+					stopTransition($slider, settings, type, vars.active, vars.next);
+				}else{*/
+					vars.next.addClass(vars.prefix + 'next-item');
+				
+					//check for random effect
+					if (preparations[effect] == undefined) {
+						consoleLog('Preparations for ' + effect + ' not found.');
 					} else {
-						consoleLog('Start transition['+type+']() with ' + effect + ' and element ' + vars.next.attr('data-' + vars.prefix + 'item'));
-						effects[effect]($slider, params);
+						preparations[effect]($slider, settings, vars);
 					}
-					
-					if (type == 'prev' && features['progressbar'] != undefined) {
-						vars.container.find('.progressbar').trigger('start');
+				
+					//hide captions
+					if (settings.showCaptions !== 'never') {
+						vars.active.find('.' + vars.prefix + 'caption').stop(true, true).fadeOut(settings.captionsFadeTime);
 					}
+				
+					//change navigation, checks for change-before/-after itself
+					changeNavigation($slider, settings, type, vars.next.attr('data-' + vars.prefix + 'item'));
 					
 					setTimeout(function () {
-						settings[type == 'prev' ? 'callBackPrev' : 'callBackNext']($slider, settings, vars);
-						vars.container.removeClass('inProgress');
-						//start progressbar, if is included
-						if (vars.isPlaying && features['progressbar'] != undefined) {
-							vars.container.find('.' + vars.prefix + 'progressbar').trigger('start', [vars.durationAutoPlay - settings.effectTime]);
+						var params = [];
+						params.settings = settings;
+						params.animateActive = settings.animateActive;
+				
+						//getDirection
+						params.direction = getRandom(settings[type == 'prev' ? 'slidePrevDirection' : 'slideNextDirection']);
+				
+						//run effect
+						if (effects[effect] == undefined) {
+							consoleLog('Effect ' + effect + ' not found.');
+						} else {
+							consoleLog('Start transition['+type+']() with ' + effect + ' and element ' + vars.next.attr('data-' + vars.prefix + 'item'));
+							effects[effect]($slider, params);
 						}
-					}, settings.effectTime);
-				}, settings.captionsFadeTime);
+						
+						if (type == 'prev' && features['progressbar'] != undefined) {
+							vars.container.find('.progressbar').trigger('start');
+						}
+						
+						setTimeout(function () {
+							settings[type == 'prev' ? 'callBackPrev' : 'callBackNext']($slider, settings, vars);
+							vars.container.removeClass('inProgress');
+							//start progressbar, if is included
+							if (vars.isPlaying && features['progressbar'] != undefined) {C}
+						}, settings.effectTime);
+					}, settings.captionsFadeTime);
+			//	}
 			},
 			
 		//change navigation before/after transition
@@ -783,12 +818,33 @@
 		//get random item
 			getRandom = function (array) {
 				return array[parseInt((Math.random() * array.length), 10)];
-			};
+			},
 
 		//helper function
-		empty = function (string) {
-			return $.trim(string.toString()) == '';
-		};
+			empty = function (string) {
+				return $.trim(string.toString()) == '';
+			}
+			
+		//stop current transition
+			/*stopTransition = function($slider, settings, type, $active, $next){
+				var vars = $slider.data('rhinoslider:vars'), i = 1, resetQuantity = 0;
+				vars.active = $active.stop(true, true);
+				vars.next = $next.stop(true, true);
+				$.each($.rhinoslider.resets, function () {
+					resetQuantity++;
+				});
+				$.each($.rhinoslider.resets, function (key, resetFunction) {
+					resetFunction($slider, settings);
+					i++;
+					if(i == resetQuantity){
+						vars.container.removeClass('inProgress');
+						setTimeout(function(){
+							transition($slider, settings, type);
+						}, 10);
+					}
+				});
+			}*/
+		;
 
 		this.pause = function () {
 			pause();
@@ -805,8 +861,9 @@
 		this.next = function ($next) {
 			transition($slider, settings, 'next', $next);
 		};
-		this.debug = function () { // @did removed param dontLog, cause it was unused
+		this.debug = function () {
 			console.log('Rhinoslider v' + vars.version);
+			console.log('Using jQuery v' + $().jquery);
 			console.log('Settings:');
 			console.log(settings);
 			console.log(vars.items.length + ' items');
@@ -873,6 +930,8 @@
 		pauseOnHover:           true,
 		//pause when controls are used
 		pauseOnControlUsage:    true,
+		//if true, transitions will be stopped, when clicking next/prev
+		forceTransition:        true,
 		//if the active content should be animated too - depending on effect slide
 		animateActive:          true,
 		//start slideshow automatically on init
@@ -2071,7 +2130,6 @@
 				resetCSS,
 				animateCSS,
 				$pBar,
-				pBarInterval,
 				dir = settings.progressbarDirection,
 				id = vars.container.attr('data-' + vars.prefix + 'id')
 				;
@@ -2091,12 +2149,42 @@
 					});
 				})
 				.on('stop', '.' + vars.prefix + 'progressbar', function (e) {
-					clearInterval(pBarInterval);
 					$pBar.stop(true, false).fadeOut(settings.progressbarFadeTime, function () {
 						$pBar.css(resetCSS);
 					});
 				})
 			;
+		},
+		hash:               function ($slider, settings) {
+			var
+				vars = $slider.data('rhinoslider:vars'),
+				hash = location.hash.replace('#', ''),
+				$active,
+				index
+			;
+			//prevent feature to run again at the end of init()
+			if(vars.hash){
+				return true;
+			}
+			
+			if(hash.indexOf('/') > -1){
+				hash = hash.split('/');
+				hash = hash[hash.length - 1];
+			}
+			
+			if($.trim(hash) != '' && vars.container.find('#' + hash).length > 0){
+				$active = vars.container.find('#' + hash).parents('.' + vars.prefix + 'item');
+			}else{
+				index = vars.items.length > parseInt(hash, 10) ? hash : settings.slideToStart;
+				vars.items.each(function (key, element) {
+					if (key == index) {
+						$active = $(element);
+					}
+				});
+			}
+			
+			$active.addClass(vars.prefix + 'active');
+			return true;
 		}
 	};
 
