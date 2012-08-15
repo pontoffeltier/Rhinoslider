@@ -7,7 +7,6 @@
  * rhinoslider.com/license
  */
 (function ($, window, undefined) {
-
 	$.extend($.easing, {
 		def:     'out',
 		out:     function (none, currentTime, startValue, endValue, totalTime) {
@@ -2262,5 +2261,4 @@
 			$slider.data('rhinoslider:vars', vars);
 		}
 	}
-
 })(jQuery, window);
