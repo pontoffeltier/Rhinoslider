@@ -768,7 +768,9 @@
 							settings[type == 'prev' ? 'callBackPrev' : 'callBackNext']($slider, settings, vars);
 							vars.container.removeClass('inProgress');
 							//start progressbar, if is included
-							if (vars.isPlaying && features['progressbar'] != undefined) {C}
+							if (vars.isPlaying && features['progressbar'] != undefined) {
+								vars.container.find('.' + vars.prefix + 'progressbar').trigger('start', [vars.durationAutoPlay - settings.effectTime]);
+							}
 						}, settings.effectTime);
 					}, settings.captionsFadeTime);
 			//	}
