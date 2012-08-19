@@ -7,6 +7,7 @@
  * rhinoslider.com/license
  */
 (function ($, window, undefined) {
+
 	$.extend($.easing, {
 		def:     'out',
 		out:     function (none, currentTime, startValue, endValue, totalTime) {
@@ -32,7 +33,8 @@
 			$slider = $(element),
 			effects = $.fn.rhinoslider.effects,
 			preparations = $.fn.rhinoslider.preparations,
-			features = $.fn.rhinoslider.features
+			features = $.fn.rhinoslider.features,
+			resets = $.fn.rhinoslider.resets
 
 		//internal variables
 			vars = {
@@ -104,7 +106,16 @@
 						settings.features[feature] = features[feature];
 					});
 				}
+				if (null != settings.resets) {
+					tmpReset = typeof settings.resets == 'string' ? settings.resets.split(',') : settings.resets;
+					settings.resets = {};
+					$.each(tmpReset, function (i, resetName) {
+						var reset = $.trim(resetName);
+						settings.resets[reset] = resets[reset];
+					});
+				}
 				settings.features = null === settings.features ? features : settings.features;
+				settings.resets = null === settings.resets ? resets : settings.resets;
 				settings.width = null == settings.width ? $slider.width() : parseInt(settings.width, 10);
 				settings.height = null == settings.height ? $slider.height() : parseInt(settings.height, 10);
 
@@ -610,7 +621,7 @@
 					});
 				}
 				var $active = $slider.find('.' + vars.prefix + 'active');
-				$active.css({
+				$active.stop(true, true).css({
 					zIndex:  1,
 					opacity: 1
 				});
@@ -692,7 +703,7 @@
 		//prev/next function
 			transition = function ($slider, settings, type, $next) {
 				var vars = $slider.data('rhinoslider:vars'), effect = getRandom(settings.effect), inProgress = vars.container.hasClass('inProgress');
-				if ((vars.container.hasClass('inProgress')/* && !settings.forceTransition*/) || (!settings.cycled && (type == 'prev' && isFirst(vars.active) || type == 'next' && isLast(vars.active))) || (type != 'prev' && type != 'next')) {
+				if ((vars.container.hasClass('inProgress') && !settings.forceTransition) || (!settings.cycled && (type == 'prev' && isFirst(vars.active) || type == 'next' && isLast(vars.active))) || (type != 'prev' && type != 'next')) {
 					return false;
 				}
 				
@@ -720,12 +731,10 @@
 						return false;
 					}
 
-// @todo: animation has to be cleared properly, doesn't work yet...
-			/*	if (inProgress && settings.forceTransition){
+				if (inProgress && settings.forceTransition){
 					//clear animation
-					console.log('stop transition');
 					stopTransition($slider, settings, type, vars.active, vars.next);
-				}else{*/
+				}else{
 					vars.next.addClass(vars.prefix + 'next-item');
 				
 					//check for random effect
@@ -772,7 +781,7 @@
 							}
 						}, settings.effectTime);
 					}, settings.captionsFadeTime);
-			//	}
+				}
 			},
 			
 		//change navigation before/after transition
@@ -793,7 +802,7 @@
 					marginLeft = -Math.abs(nextItemIndex * vars.bulletWidth) + (parseInt(settings.maxBullets / 2, 10) * vars.bulletWidth);
 
 					marginLeft = marginLeft >= 0 ? 0 : Math.abs(marginLeft) >= navWidth ?  -navWidth : marginLeft;
-					vars.navigation.animate({marginLeft: marginLeft}, settings.controlsFadeTime);
+					vars.navigation.stop(true, true).animate({marginLeft: marginLeft}, settings.controlsFadeTime, 'linear');
 				}, time);
 			},
 
@@ -827,24 +836,25 @@
 			}
 			
 		//stop current transition
-			/*stopTransition = function($slider, settings, type, $active, $next){
+			stopTransition = function($slider, settings, type, $active, $next){
 				var vars = $slider.data('rhinoslider:vars'), i = 1, resetQuantity = 0;
 				vars.active = $active.stop(true, true);
 				vars.next = $next.stop(true, true);
+				$slider.data('rhinoslider:vars', vars);
 				$.each($.rhinoslider.resets, function () {
 					resetQuantity++;
 				});
-				$.each($.rhinoslider.resets, function (key, resetFunction) {
-					resetFunction($slider, settings);
-					i++;
-					if(i == resetQuantity){
-						vars.container.removeClass('inProgress');
-						setTimeout(function(){
-							transition($slider, settings, type);
-						}, 10);
+				$.each(resets, function (key, resetFunction) {
+					if(key != 'activeElement'){
+						resetFunction($slider, settings);
 					}
+					if(i === resetQuantity){
+						vars.container.removeClass('inProgress');
+						transition($slider, settings, type);
+					}
+					i++;
 				});
-			}*/
+			}
 		;
 
 		this.pause = function () {
@@ -2200,8 +2210,8 @@
 				margin:  0,
 				opacity: 0
 			})
-				//and remove its active class
-				.removeClass(vars.prefix + 'active');
+			//and remove its active class
+			.removeClass(vars.prefix + 'active');
 		},
 		nextElement:   function ($slider, settings) {
 			var vars = $slider.data('rhinoslider:vars');
@@ -2211,6 +2221,7 @@
 				.removeClass(vars.prefix + 'next-item')
 				//add the active-class
 				.addClass(vars.prefix + 'active')
+				.stop(true, true)
 				//and put  it above the others
 				.css({
 					zIndex:  1,
@@ -2261,4 +2272,5 @@
 			$slider.data('rhinoslider:vars', vars);
 		}
 	}
+
 })(jQuery, window);
