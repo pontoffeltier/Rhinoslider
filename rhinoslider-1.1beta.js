@@ -378,8 +378,19 @@
 								var
 									$img = vars.hoverImages.find('[data-' + vars.prefix + 'rel=' + $this.attr('data-' + vars.prefix + 'rel') + ']'),
 									$active = vars.hoverImages.find('.' + activeClass),
-									left = vars.navigationContainer.position().left + parseInt(vars.navigationContainer.css('margin-left'), 10) - (vars.hoverImages.outerWidth(true) * 0.5) + $this.position().left + ($this.outerWidth() * 0.5) + (2 * vars.bulletWidth)
+									left,
+									containerLeft =  vars.navigationContainer.position().left + parseInt(vars.navigationContainer.css('margin-left'), 10)
+									// - (vars.hoverImages.outerWidth(true) / 2);
+									//vars.navigationContainer.outerWidth(true) - (vars.hoverImages.outerWidth(true) * 0.5) + 
 								;
+								//left pos of container - half its own size to center
+								left = containerLeft - (vars.hoverImages.outerWidth(true) / 2);
+								//find position of bullet
+								left += ($this.parent('li').index() + 0.5) * $this.outerWidth(true);
+								//add margin of ul 
+								left += parseInt(vars.navigation.css('margin-left'), 10);
+								//don't forget the controlbuttons
+								left += (vars.buttons.bulletControls.length / 2) * vars.bulletWidth;
 								vars.hoverImages.css('top', vars.navigationContainer.position().top - vars.hoverImages.height() - 10).find('img').not($img).css('z-index', 0);
 								$active.css('z-index', 1).stop(true, true).removeClass(activeClass);
 								$img.addClass(activeClass).css({zIndex: 2}).stop(true, true).fadeIn((hoverImagesIsOpen ? settings.controlFadeTime : 0), function () {
@@ -423,8 +434,10 @@
 							vars.buttons.bullets.each(function (i, element) {
 								$(element).find('img').attr({width: thumbWidth, height: thumbHeight});
 							});
-							vars.buttons.prev.css('bottom', -vars.navigationContainer.height());
-							vars.buttons.next.css('bottom', -vars.navigationContainer.height());
+							if(settings.controlsPrevNext){
+								vars.buttons.prev.css('bottom', -vars.navigationContainer.height());
+								vars.buttons.next.css('bottom', -vars.navigationContainer.height());
+							}
 							vars.bulletWidth = thumbWidth;
 							
 							//animate
@@ -496,13 +509,13 @@
 				}
 				//hide/show bullets on hover or never
 				if (settings.showBullets === 'hover') {
-					vars.navigation.hide();
+					vars.navigationContainer.hide();
 					vars.container.mouseenter(
 						function () {
-							vars.navigation.stop(true, true).fadeIn(settings.controlFadeTime);
+							vars.navigationContainer.stop(true, true).fadeIn(settings.controlFadeTime);
 						}).mouseleave(function () {
 							setTimeout(function () {
-								vars.navigation.fadeOut(settings.controlFadeTime);
+								vars.navigationContainer.fadeOut(settings.controlFadeTime);
 							}, 200);
 						});
 				}
@@ -728,8 +741,8 @@
 				}
 				
 				if (vars.next.hasClass(vars.prefix + 'active')) {
-						return false;
-					}
+					return false;
+				}
 
 				if (inProgress && settings.forceTransition){
 					//clear animation
@@ -845,9 +858,7 @@
 					resetQuantity++;
 				});
 				$.each(resets, function (key, resetFunction) {
-					if(key != 'activeElement'){
-						resetFunction($slider, settings);
-					}
+					resetFunction($slider, settings);
 					if(i === resetQuantity){
 						vars.container.removeClass('inProgress');
 						transition($slider, settings, type);
@@ -857,10 +868,10 @@
 			}
 		;
 
-		this.pause = function () {
+		this.pause = this.stop = function () {
 			pause();
 		};
-		this.play = function () {
+		this.play = this.start = function () {
 			play();
 		};
 		this.toggle = function () {
@@ -919,7 +930,7 @@
 		});
 	};
 
-	var externalCallers = ['next', 'prev', 'play', 'pause', 'debug', 'uninit', 'kill', 'destroy', 'remove', 'reset', 'refresh', 'reload'];
+	var externalCallers = ['next', 'prev', 'play', 'pause', 'debug', 'uninit', 'kill', 'destroy', 'remove', 'reset', 'refresh', 'reload', 'stop', 'start'];
 	$.each(externalCallers, function (i, functionName) {
 		$.rhinoslider[functionName] = function (selector, variable) {
 			$(selector).data('rhinoslider')[functionName](variable);
@@ -934,19 +945,19 @@
 		//linear or shuffled order for items
 		randomOrder:            false,
 		//show/hide prev/next-controls
-		controlsPrevNext:       true,
+		controlsPrevNext:       false,
 		//show/hide play/pause-controls
-		controlsPlayPause:      true,
+		controlsPlayPause:      false,
 		//pause on mouse-over
-		pauseOnHover:           true,
+		pauseOnHover:           false,
 		//pause when controls are used
 		pauseOnControlUsage:    true,
 		//if true, transitions will be stopped, when clicking next/prev
-		forceTransition:        true,
+		forceTransition:        false,
 		//if the active content should be animated too - depending on effect slide
 		animateActive:          true,
 		//start slideshow automatically on init
-		autoPlay:               false,
+		autoPlay:               true,
 		//begin from start if end has reached
 		cycled:                 true,
 		//sets if actions should be logged
@@ -957,10 +968,6 @@
 		height:                 null,
 		//features that should be used: null triggers all
 		features:               null,
-		//use hashtags to determine slide to start
-		useHashTags:            false,
-		//determine, if every slide should be added to browser history
-		useHistory:             false,
 		//time, the content is visible before next content will be blend in - depends on autoPlay
 		showTime:               3000,
 		//time, the effect will last
@@ -990,13 +997,13 @@
 		//show image-title: hover, always, never
 		showCaptions:           'never',
 		//show navigation: hover, always, never
-		showBullets:            'hover',
+		showBullets:            'never',
 		//change bullets before or after the animation
 		changeBullets:          'after',
 		//type of bullet content
 		bulletType:             'number',
 		//show controls: hover, always, never
-		showControls:           'hover',
+		showControls:           'never',
 		//the direction, the prev-button triggers - depending on effect slide
 		slidePrevDirection:     'toLeft',
 		//the direction, the next-button triggers - depending on effect slide
@@ -2107,8 +2114,9 @@
 		
 			$slider.get(0).addEventListener('touchstart', start, false);		
 			$slider.get(0).addEventListener('touchmove', move, false);
-			$slider.get(0).addEventListener('mousedown', start, false);		
-			$slider.get(0).addEventListener('mousemove', move, false);
+			//if links are in content, this disables them
+			/*$slider.get(0).addEventListener('mousedown', start, false);		
+			$slider.get(0).addEventListener('mousemove', move, false);*/
 		},
 		resize:             function ($slider, settings) {
 			var vars = $slider.data('rhinoslider:vars');
@@ -2202,6 +2210,8 @@
 	$.rhinoslider.resets = {
 		activeElement: function ($slider, settings) {
 			var vars = $slider.data('rhinoslider:vars');
+			if(!vars){return false;}
+			
 			//set the active-element on the same z-index as the rest and reset css
 			vars.container.find('.' + vars.prefix + 'active').stop(true, true).css({
 				zIndex:  0,
@@ -2215,6 +2225,7 @@
 		},
 		nextElement:   function ($slider, settings) {
 			var vars = $slider.data('rhinoslider:vars');
+			if(!vars){return false;}
 			//set the active-element on the same z-index as the rest and reset css
 			vars.container.find('.' + vars.prefix + 'next-item')
 				//remove the next-class
@@ -2233,6 +2244,7 @@
 		},
 		cycled:        function ($slider, settings) {
 			var vars = $slider.data('rhinoslider:vars');
+			if(!vars){return false;}
 			//check if cycled is false and start or end is reached
 			if (!settings.cycled) {
 				if (settings.controlsPrevNext) {
@@ -2260,6 +2272,7 @@
 		},
 		misc:          function ($slider, settings) {
 			var vars = $slider.data('rhinoslider:vars');
+			if(!vars){return false;}
 
 			//make the "next"-element the new active-element
 			vars.active = vars.next;
