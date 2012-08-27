@@ -99,12 +99,16 @@
 
 				//other
 				if (null != settings.features) {
-					tmpFeature = typeof settings.features == 'string' ? settings.features.split(',') : settings.features;
-					settings.features = {};
-					$.each(tmpFeature, function (i, featureName) {
-						var feature = $.trim(featureName);
-						settings.features[feature] = features[feature];
-					});
+					if(settings.features != 'none'){
+						tmpFeature = typeof settings.features == 'string' ? settings.features.split(',') : settings.features;
+						settings.features = {};
+						$.each(tmpFeature, function (i, featureName) {
+							var feature = $.trim(featureName);
+							settings.features[feature] = features[feature];
+						});
+					}else{
+						settings.features = {};
+					}
 				}
 				if (null != settings.resets) {
 					tmpReset = typeof settings.resets == 'string' ? settings.resets.split(',') : settings.resets;
@@ -420,6 +424,11 @@
 
 						vars.navigation.parent().css('height', maxThumbHeight);
 						vars.navigationContainer.css('height', maxThumbHeight);
+						
+						if(settings.controlsPrevNext){
+							vars.buttons.prev.css('bottom', -vars.navigationContainer.height());
+							vars.buttons.next.css('bottom', -vars.navigationContainer.height());
+						}
 						
 						//on resize
 						vars.container.on('setSize', '.' + vars.prefix + 'bullets', function () {
@@ -910,6 +919,9 @@
 			$newSlider = this.uninit();
 			$newSlider.rhinoslider(settings);
 		};
+		this.consoleLog = function(msg){
+			consoleLog(msg);
+		}
 
 		init($slider, settings, vars);
 	};
@@ -930,7 +942,7 @@
 		});
 	};
 
-	var externalCallers = ['next', 'prev', 'play', 'pause', 'debug', 'uninit', 'kill', 'destroy', 'remove', 'reset', 'refresh', 'reload', 'stop', 'start'];
+	var externalCallers = ['next', 'prev', 'play', 'pause', 'debug', 'uninit', 'kill', 'destroy', 'remove', 'reset', 'refresh', 'reload', 'stop', 'start', 'consoleLog'];
 	$.each(externalCallers, function (i, functionName) {
 		$.rhinoslider[functionName] = function (selector, variable) {
 			$(selector).data('rhinoslider')[functionName](variable);
@@ -967,7 +979,7 @@
 		//width to calculate aspecRatio
 		height:                 null,
 		//features that should be used: null triggers all
-		features:               null,
+		features:               'none',
 		//time, the content is visible before next content will be blend in - depends on autoPlay
 		showTime:               3000,
 		//time, the effect will last
@@ -1011,7 +1023,7 @@
 		//direction, where the progressbar  goes
 		progressbarDirection:   'toRight',
 		//check if controlsKeyboard is global or on slider only
-		globalControlsKeyboard: true,
+		globalControlsKeyboard: false,
 		//text for the prev-button
 		prevText:               'prev',
 		//text for the next-button
@@ -1029,7 +1041,7 @@
 		//action done when swipeGesture "left" is triggered: prev, next
 		swipeLeft:              'prev',
 		//style which will be transfered to the containerelement
-		styles:                 'position,top,right,bottom,left,margin-top,margin-right,margin-bottom,margin-left,width,height,min-width,min-height,max-width,max-height',
+		styles:                 'position,top,right,bottom,left,margin-top,margin-right,margin-bottom,margin-left,width,height,min-width,min-height,max-width,max-height,float',
 		//if bulletType is image or imageHover, this is the source if no image is found
 		noImage:                'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAHgAAAAyCAMAAACgee/qAAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAAyBpVFh0WE1MOmNvbS5hZG9iZS54bXAAAAAAADw/eHBhY2tldCBiZWdpbj0i77u/IiBpZD0iVzVNME1wQ2VoaUh6cmVTek5UY3prYzlkIj8+IDx4OnhtcG1ldGEgeG1sbnM6eD0iYWRvYmU6bnM6bWV0YS8iIHg6eG1wdGs9IkFkb2JlIFhNUCBDb3JlIDUuMC1jMDYwIDYxLjEzNDc3NywgMjAxMC8wMi8xMi0xNzozMjowMCAgICAgICAgIj4gPHJkZjpSREYgeG1sbnM6cmRmPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5LzAyLzIyLXJkZi1zeW50YXgtbnMjIj4gPHJkZjpEZXNjcmlwdGlvbiByZGY6YWJvdXQ9IiIgeG1sbnM6eG1wPSJodHRwOi8vbnMuYWRvYmUuY29tL3hhcC8xLjAvIiB4bWxuczp4bXBNTT0iaHR0cDovL25zLmFkb2JlLmNvbS94YXAvMS4wL21tLyIgeG1sbnM6c3RSZWY9Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC9zVHlwZS9SZXNvdXJjZVJlZiMiIHhtcDpDcmVhdG9yVG9vbD0iQWRvYmUgUGhvdG9zaG9wIENTNSBXaW5kb3dzIiB4bXBNTTpJbnN0YW5jZUlEPSJ4bXAuaWlkOkI4QzQ3QjM0QTcxODExRTFBQTdBOEU1NzA0NjNGNDkyIiB4bXBNTTpEb2N1bWVudElEPSJ4bXAuZGlkOkI4QzQ3QjM1QTcxODExRTFBQTdBOEU1NzA0NjNGNDkyIj4gPHhtcE1NOkRlcml2ZWRGcm9tIHN0UmVmOmluc3RhbmNlSUQ9InhtcC5paWQ6QjhDNDdCMzJBNzE4MTFFMUFBN0E4RTU3MDQ2M0Y0OTIiIHN0UmVmOmRvY3VtZW50SUQ9InhtcC5kaWQ6QjhDNDdCMzNBNzE4MTFFMUFBN0E4RTU3MDQ2M0Y0OTIiLz4gPC9yZGY6RGVzY3JpcHRpb24+IDwvcmRmOlJERj4gPC94OnhtcG1ldGE+IDw/eHBhY2tldCBlbmQ9InIiPz57VK4hAAAAMFBMVEWgoKBpaWnJycmFhYV3d3fx8fGSkpKtra3W1tbk5OS7u7tOTk5BQUFcXFwzMzP///+xgpaDAAABwklEQVR42uyW4XLDIAiAUVDRdPP933aCmqS9XHerTXvrmR9GiOETJBDIb7pggid4gid4gv81mMOJe7tn1X6z3MytHk8He3JH4PM9Bus7mBGIm16UPiFCDohJraAH5jZJMrEIGB8HZ0gVHI3LzjRLojAl3uGrvC0roCSD/bJtcrHClfXucXAuMOHo7qPfgWWyVMmRxsE2rUxUw34AHGnj9NNeFW2waiTYNoECvhi5YACcA6jHErWIx2CH3VG88ngguWSkRXNL6HwMVhQvZfDljFnOOJUou7vZ9TvY6UkmY8g2PXUm9cGTwSSPwRDKNnIgs34FryqZ9z+jk8DRZfDvaBKMFD64Le59C3ykPQEMfP0u2D9ahCdF69ngSIDyPwB9rS0KF2po9zIk8Bj6qlCalBsBS4NxiPXblHpiUTdTPbySpXABVItyZxoBe1Z6bUxSr7VgpQ28ydBrKLSKBmkAbNZfHXLaIlQRb8Bd7lq7aG8aAfvYPM4hSB5XX3Yeb7KerwQFWrcaSq4olrD2gpXhzAbe5KXsK/hq0Sdt5CNZzVRCVlO6FgbtOht4k1NZ6btF6VbuA0vmBE/wBE/wBL/m+hFgAMzATBHD/2PjAAAAAElFTkSuQmCC',
 		//callbacks
@@ -1722,7 +1734,7 @@
 				values = [],
 				preSlide = function ($slider, settings, $item) {
 					var vars = $slider.data('rhinoslider:vars'), parts = settings.parts.x < 1 ? 1 : settings.parts.x;
-					parts = settings.parts.y == settings.parts.x ? settings.parts.x : settings.parts.x * settings.parts.y;
+					parts = settings.parts.x < 1 ? 1 : settings.parts.x;
 					$item.html('<div class="' + vars.prefix + 'partContainer">' + $item.html() + '</div>');
 					var
 						part = $item.html(),
@@ -1813,10 +1825,10 @@
 			//effect "slideBars"
 				slideBars = function ($slider, settings) {
 					parts = settings.parts.x < 1 ? 1 : settings.parts.x;
-					parts = settings.parts.y == settings.parts.x ? settings.parts.x : settings.parts.x * settings.parts.y;
 					var vars = $slider.data('rhinoslider:vars');
 					var
 						partDuration, partDelay = settings.partDelay,
+						minPartDuration = 300,
 						activeContent = vars.active.html(),
 						nextContent = vars.next.html(),
 						width = $slider.width(),
@@ -1834,6 +1846,12 @@
 					}
 
 					partDuration = settings.effectTime - (2 * ((parts - 1) * partDelay));
+					console.log('partDuration', partDuration);
+					if(partDuration < minPartDuration){
+						settings.effectTime = Math.abs(partDuration) + settings.effectTime + minPartDuration;
+						partDuration = settings.effectTime - (2 * ((parts - 1) * partDelay));
+					}
+					
 
 					vars.active.css({
 						backgroundImage: 'none',
