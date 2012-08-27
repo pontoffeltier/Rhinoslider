@@ -33,27 +33,29 @@
 			$slider = $(element),
 			effects = $.fn.rhinoslider.effects,
 			preparations = $.fn.rhinoslider.preparations,
-			features = $.fn.rhinoslider.features
+			features = $.fn.rhinoslider.features,
+			resets = $.fn.rhinoslider.resets
 
 		//internal variables
-		vars = {
-			isPlaying:        false,
-			intervalAutoPlay: false,
-			durationAutoPlay: 0,
-			active:           '',
-			next:             '',
-			container:        '',
-			items:            '',
-			hoverImages:      '',
-			buttons:          [],
-			prefix:           'rhino-',
-			playedArray:      [],
-			playedCounter:    0,
-			original:         element,
-			orgCSS:           [],
-			aspectRatio:      1,
-			version:          1.1
-		}
+			vars = {
+				isPlaying:        false,
+				hash:             false,
+				durationAutoPlay: 0,
+				bulletWidth:      0,
+				active:           '',
+				next:             '',
+				container:        '',
+				items:            '',
+				hoverImages:      '',
+				buttons:          [],
+				prefix:           'rhino-',
+				playedArray:      [],
+				playedCounter:    0,
+				original:         element,
+				orgCSS:           [],
+				aspectRatio:      1,
+				version:          1.1
+			}
 		;
 
 		//store original settings for reload
@@ -64,13 +66,13 @@
 		var
 			setUpSettings = function ($slider, settings) {
 				//bool
-				var tmpValues = ['controlsPrevNext', 'controlsKeyboard', 'controlsMousewheel', 'controlsPlayPause', 'pauseOnHover', 'animateActive', 'autoPlay', 'cycled', 'consoleLog', 'pauseOnControlUsage'];
+				var tmpValues = ['controlsPrevNext', 'globalControlsKeyboard', 'controlsPlayPause', 'pauseOnHover', 'forceTransition', 'animateActive', 'autoPlay', 'cycled', 'consoleLog', 'pauseOnControlUsage'];
 				$.each(tmpValues, function (i, key) {
 					settings[key] = String(settings[key]) === 'true' ? true : false;
 				});
 
 				//int
-				tmpValues = ['showTime', 'controlFadeTime', 'effectTime', 'captionsFadeTime', 'slideToStart'];
+				tmpValues = ['showTime', 'controlFadeTime', 'effectTime', 'captionsFadeTime', 'slideToStart', 'maxBullets'];
 				$.each(tmpValues, function (i, key) {
 					settings[key] = ((key === 'effectTime' && settings.effect === 'none') || (key === 'captionsFadeTime' && settings['showCaptions'] === 'never')) ? 0 : parseInt(settings[key], 10);
 				});
@@ -97,14 +99,27 @@
 
 				//other
 				if (null != settings.features) {
-					tmpFeature = typeof settings.features == 'string' ? settings.features.split(',') : settings.features;
-					settings.features = {};
-					$.each(tmpFeature, function (i, featureName) {
-						var feature = $.trim(featureName);
-						settings.features[feature] = features[feature];
+					if(settings.features != 'none'){
+						tmpFeature = typeof settings.features == 'string' ? settings.features.split(',') : settings.features;
+						settings.features = {};
+						$.each(tmpFeature, function (i, featureName) {
+							var feature = $.trim(featureName);
+							settings.features[feature] = features[feature];
+						});
+					}else{
+						settings.features = {};
+					}
+				}
+				if (null != settings.resets) {
+					tmpReset = typeof settings.resets == 'string' ? settings.resets.split(',') : settings.resets;
+					settings.resets = {};
+					$.each(tmpReset, function (i, resetName) {
+						var reset = $.trim(resetName);
+						settings.resets[reset] = resets[reset];
 					});
 				}
 				settings.features = null === settings.features ? features : settings.features;
+				settings.resets = null === settings.resets ? resets : settings.resets;
 				settings.width = null == settings.width ? $slider.width() : parseInt(settings.width, 10);
 				settings.height = null == settings.height ? $slider.height() : parseInt(settings.height, 10);
 
@@ -150,29 +165,29 @@
 
 					//add functionality to the "prev"-button
 					vars.buttons.prev.click(function () {
-						prev($slider, settings);
+						transition($slider, settings, 'prev');
 
-						//stop autoplay, if set
-						if (vars.isPlaying && settings.pauseOnControlUsage) {
-							pause();
-						}
-						//stop progressbar, if is included
-						if (features['progressbar'] != undefined) {
-							vars.container.find('.' + vars.prefix + 'progressbar').trigger('stop');
+						if (vars.isPlaying) {
+							if(settings.pauseOnControlUsage){
+								//stop autoplay, if set
+								pause();
+							}else{
+								resetAutoPlay($slider, settings);
+							}
 						}
 					});
 
 					//add functionality to the "next"-button
 					vars.buttons.next.click(function () {
-						next($slider, settings);
+						transition($slider, settings, 'next');
 
-						//stop autoplay, if set
-						if (vars.isPlaying && settings.pauseOnControlUsage) {
-							pause();
-						}
-						//stop progressbar, if is included
-						if (features['progressbar'] != undefined) {
-							vars.container.find('.' + vars.prefix + 'progressbar').trigger('stop');
+						if (vars.isPlaying) {
+							if(settings.pauseOnControlUsage){
+								//stop autoplay, if set
+								pause();
+							}else{
+								resetAutoPlay($slider, settings);
+							}
 						}
 					});
 				}
@@ -276,59 +291,86 @@
 					$(element).attr('data-' + vars.prefix + 'item', vars.prefix + 'item' + i);
 				});
 
+				//add vars to data for use in features.hash
+				$slider.data('rhinoslider:vars', vars);
 				//set active element
 				vars.active = getActive(vars, settings);
 
 				//generate navigation
 				if (settings.showBullets !== 'never') {
 					vars.container.addClass(vars.prefix + 'show-bullets bullets-' + settings.bulletType);
-					var navi = '<ol class="' + vars.prefix + 'bullets">', thumbWidth = parseInt(vars.container.width() / vars.items.length, 10), thumbHeight = maxThumbHeight = 0, imageHoverOpacity = 0.5;
+					var
+						navi = {prefix: '<div class="' + vars.prefix + 'bullets">', listStart: '<div><ol>', listEnd: '</ol></div>', suffix: '</div>', items: [], prevButtons: '', nextButtons: ''},
+						arrows = {prev: '&lt;', next: '&gt;', first: '&laquo;', last: '&raquo;'},
+						thumbWidth = parseInt(vars.container.width() / settings.maxBullets, 10),
+						thumbHeight = maxThumbHeight = tmpWidth = 0, imageHoverOpacity = 0.5,
+						itemIndex = ['first', 'prev', 'next', 'last'],
+						visibleBullets = settings.maxBullets > vars.items.length ? vars.items.length : settings.maxBullets;
+					;
+					
+					//add arrows for too many items
+					if(settings.bulletType != 'image' && vars.items.length > settings.maxBullets){
+						navi.prevButtons = navi.nextButtons = '';
+						for(key in itemIndex){
+							var naviKey = key < 2 ? 'prevButtons' : 'nextButtons';
+							navi[naviKey] += '<a data-' + vars.prefix + 'rel="' + vars.prefix + 'item-' + itemIndex[key] + '" class="' + vars.prefix + 'bullet ' + vars.prefix + 'bullet-' + itemIndex[key] + ' ' + vars.prefix + 'bullet-control">' + arrows[itemIndex[key]]+ '</a>';
+						}
+					}
+					
+					
 					if (settings.bulletType == 'hoverImage') {
+						var hoverImagesIsOpen = false, hoverImagesTimeout, activeClass = vars.prefix + 'active-image';
+	
+						//add container for images
 						vars.container.append('<div class="' + vars.prefix + 'hover-images"></div>');
 						vars.hoverImages = vars.container.find('.' + vars.prefix + 'hover-images');
 						thumbWidth = vars.hoverImages.width();
 					}
+					
 					vars.items.each(function (i, element) {
 						var $item = $(element), rel = vars.prefix + 'item' + i, index = parseInt(i + 1, 10), bulletContent;
 						bulletContent = index;
+						
+						//when images are used, append them
 						if (settings.bulletType != 'number') {
 							var $img = $item.find('img:first'), src;
 							src = $img.attr('src') != undefined ? $img.attr('src') : settings.noImage;
+
 							thumbHeight = parseInt(thumbWidth / vars.aspectRatio, 10);
 							maxThumbHeight = thumbHeight > maxThumbHeight ? thumbHeight : maxThumbHeight;
 							bulletContent = '<img src="' + src + '" width="' + thumbWidth + '" height="' + thumbHeight + '" data-' + vars.prefix + 'rel="' + rel + '" />';
 							bulletContent = settings.bulletType == 'hoverImage' ? index + ' ' + bulletContent : bulletContent;
 						}
-						navi = navi + '<li><a data-' + vars.prefix + 'rel="' + rel + '" class="' + vars.prefix + 'bullet">' + bulletContent + '</a></li>';
+						navi.items.push('<li><a data-' + vars.prefix + 'rel="' + rel + '" class="' + vars.prefix + 'bullet">' + bulletContent + '</a></li>');
 					});
-					navi = navi + '</ol>';
-					vars.container.append(navi);
-
-					vars.navigation = vars.container.find('.' + vars.prefix + 'bullets');
+					
+					vars.container.append(navi.prefix+navi.prevButtons+navi.listStart+navi.items.join('')+navi.listEnd+navi.nextButtons+navi.suffix);
+					vars.navigationContainer = vars.container.find('.' + vars.prefix + 'bullets');
+					vars.navigation = vars.navigationContainer.find('ol');
 					vars.buttons.bullets = vars.navigation.find('.' + vars.prefix + 'bullet');
-					vars.container.find('[data-' + vars.prefix + 'rel=' + vars.active.attr('data-' + vars.prefix + 'item') + ']').addClass(vars.prefix + 'active-bullet');
-					vars.buttons.bullets.first().addClass(vars.prefix + 'first-bullet');
-					vars.buttons.bullets.last().addClass(vars.prefix + 'last-bullet');
-					vars.buttons.bullets.click(function () {
-						var itemID = $(this).attr('data-' + vars.prefix + 'rel');
-						var $next = vars.container.find('[data-' + vars.prefix + 'item=' + itemID + ']');
-						var curID = parseInt(vars.navigation.find('.' + vars.prefix + 'active-bullet').attr('data-' + vars.prefix + 'rel').replace(vars.prefix + 'item', ''), 10);
-						var nextID = parseInt(itemID.replace(vars.prefix + 'item', ''), 10);
-						if (curID < nextID) {
-							next($slider, settings, $next);
-						} else if (curID > nextID) {
-							prev($slider, settings, $next);
-						} else {
-							return false;
-						}
-
-						//stop autoplay, if set
-						if (vars.isPlaying && settings.pauseOnControlUsage) {
-							pause();
-						}
-					});
+					vars.buttons.bulletControls = vars.navigationContainer.find('.' + vars.prefix + 'bullet-control');
+					
+					vars.bulletWidth = vars.buttons.bullets.last().outerWidth();
+					
+					
+					if(settings.bulletType != 'image'){
+						//center bullets
+						vars.navigation.css('width', vars.buttons.bullets.length * vars.bulletWidth);
+						tmpWidth = visibleBullets * vars.bulletWidth;
+						vars.navigation.parent().css({
+							width: tmpWidth,
+							marginLeft: -tmpWidth / 2
+						});
+						tmpWidth = (visibleBullets + vars.buttons.bulletControls.length) * vars.bulletWidth;
+						vars.navigationContainer.css({
+							width: tmpWidth,
+							marginLeft: -tmpWidth / 2
+						});
+					}
+					
 					if (settings.bulletType == 'hoverImage') {
-						var hoverImagesIsOpen = false, hoverImagesTimeout, activeClass = vars.prefix + 'active-image';
+						thumbWidth = vars.hoverImages.width();
+
 						vars.hoverImages.css('height', maxThumbHeight);
 						vars.buttons.bullets
 							.each(function (i, element) {
@@ -340,59 +382,149 @@
 								var
 									$img = vars.hoverImages.find('[data-' + vars.prefix + 'rel=' + $this.attr('data-' + vars.prefix + 'rel') + ']'),
 									$active = vars.hoverImages.find('.' + activeClass),
-									left = vars.navigation.position().left + parseInt(vars.navigation.css('margin-left'), 10) - (vars.hoverImages.outerWidth(true) * 0.5) + $this.position().left + ($this.outerWidth() * 0.5)
-									;
-								vars.hoverImages.css('top', vars.navigation.position().top - vars.hoverImages.height() - 10).find('img').not($img).css('z-index', 0);
+									left,
+									containerLeft =  vars.navigationContainer.position().left + parseInt(vars.navigationContainer.css('margin-left'), 10)
+									// - (vars.hoverImages.outerWidth(true) / 2);
+									//vars.navigationContainer.outerWidth(true) - (vars.hoverImages.outerWidth(true) * 0.5) + 
+								;
+								//left pos of container - half its own size to center
+								left = containerLeft - (vars.hoverImages.outerWidth(true) / 2);
+								//find position of bullet
+								left += ($this.parent('li').index() + 0.5) * $this.outerWidth(true);
+								//add margin of ul 
+								left += parseInt(vars.navigation.css('margin-left'), 10);
+								//don't forget the controlbuttons
+								left += (vars.buttons.bulletControls.length / 2) * vars.bulletWidth;
+								vars.hoverImages.css('top', vars.navigationContainer.position().top - vars.hoverImages.height() - 10).find('img').not($img).css('z-index', 0);
 								$active.css('z-index', 1).stop(true, true).removeClass(activeClass);
-								$img.addClass(activeClass).css({zIndex: 2}).stop(true, true).fadeIn((hoverImagesIsOpen ? 300 : 0), function () {
-									$active.css({display: 'none', zIndex: 0});
-									$img.css('z-index', 1);
+								$img.addClass(activeClass).css({zIndex: 2}).stop(true, true).fadeIn((hoverImagesIsOpen ? settings.controlFadeTime : 0), function () {
+									if($img.attr('data-' + vars.prefix + 'rel') != $active.attr('data-' + vars.prefix + 'rel')){
+										$active.css({display: 'none', zIndex: 0});
+										$img.css('z-index', 1);
+									}								
 								});
-								vars.hoverImages.stop(true, false).animate({opacity: 1, left: left}, 150);
+								vars.hoverImages.stop(true, false).animate({opacity: 1, left: left}, settings.controlFadeTime / 2);
 							})
 						;
 						vars.navigation
 							.mouseenter(function () {
-								vars.hoverImages.css('left', vars.navigation.position().left + parseInt(vars.navigation.css('margin-left'), 10) - (vars.hoverImages.outerWidth(true) * 0.5)).stop(true, true).fadeIn(150);
+								vars.hoverImages.css('left', vars.navigationContainer.position().left + parseInt(vars.navigationContainer.css('margin-left'), 10) - (vars.hoverImages.outerWidth(true) * 0.5)).stop(true, true).fadeIn(settings.controlFadeTime / 2);
 								hoverImagesIsOpen = true;
 							})
 							.mouseleave(function () {
 								hoverImagesTimeout = setTimeout(function () {
 									clearTimeout(hoverImagesTimeout);
 									hoverImagesIsOpen = false;
-									vars.hoverImages.stop(true, true).fadeOut(150);
-								}, 300);
+									vars.hoverImages.stop(true, true).fadeOut(settings.controlFadeTime / 2);
+								}, settings.controlFadeTime);
 							})
 						;
 					} else if (settings.bulletType == 'image') {
-						vars.container.delegate('.' + vars.prefix + 'bullets', 'setSize', function () {
-							var thumbWidth = parseInt(vars.container.width() / vars.items.length, 10);
+						vars.navigation.css('width', vars.buttons.bullets.length * vars.bulletWidth);
+
+						vars.navigation.parent().css('height', maxThumbHeight);
+						vars.navigationContainer.css('height', maxThumbHeight);
+						
+						if(settings.controlsPrevNext){
+							vars.buttons.prev.css('bottom', -vars.navigationContainer.height());
+							vars.buttons.next.css('bottom', -vars.navigationContainer.height());
+						}
+						
+						//on resize
+						vars.container.on('setSize', '.' + vars.prefix + 'bullets', function () {
+							var thumbWidth = parseInt(vars.container.width() / visibleBullets, 10), thumbHeight, navWidth;
+							thumbHeight = thumbWidth / vars.aspectRatio;
+							navWidth = vars.buttons.bullets.length * thumbWidth;
+							vars.navigation.css('width', navWidth);
+							
+							vars.navigation.parent().css('height', thumbHeight);
+							vars.navigationContainer.css('height', thumbHeight);
+							
 							vars.buttons.bullets.each(function (i, element) {
-								$(element).find('img').attr({width: thumbWidth, height: thumbWidth / vars.aspectRatio});
+								$(element).find('img').attr({width: thumbWidth, height: thumbHeight});
 							});
-							vars.buttons.prev.css('bottom', -vars.navigation.height());
-							vars.buttons.next.css('bottom', -vars.navigation.height());
+							if(settings.controlsPrevNext){
+								vars.buttons.prev.css('bottom', -vars.navigationContainer.height());
+								vars.buttons.next.css('bottom', -vars.navigationContainer.height());
+							}
+							vars.bulletWidth = thumbWidth;
+							
+							//animate
+							marginLeft = -Math.abs(vars.active.attr('data-' + vars.prefix + 'item').replace(vars.prefix + 'item', '') * vars.bulletWidth) + (parseInt(settings.maxBullets / 2, 10) * vars.bulletWidth);
+							marginLeft = marginLeft >= 0 ? 0 : Math.abs(marginLeft) >= navWidth ?  -navWidth : marginLeft;
+							vars.navigation.stop(true, true).animate({marginLeft: marginLeft}, settings.controlsFadeTime);
+							
+							$slider.data('rhinoslider:vars', vars);
 						});
+						
 						vars.buttons.bullets
 							.fadeTo(0, imageHoverOpacity)
 							.mouseenter(function () {
-								$(this).stop(true, true).fadeTo(150, 1);
+								$(this).stop(true, true).fadeTo(settings.controlFadeTime / 2, 1);
 							})
 							.mouseleave(function () {
-								$(this).stop(true, true).fadeTo(150, imageHoverOpacity);
+								$(this).stop(true, true).fadeTo(settings.controlFadeTime / 2, imageHoverOpacity);
 							})
 						;
 					}
+					
+					//set classes and variables
+					vars.container.find('[data-' + vars.prefix + 'rel=' + vars.active.attr('data-' + vars.prefix + 'item') + ']').addClass(vars.prefix + 'active-bullet');
+					vars.buttons.bullets.first().addClass(vars.prefix + 'first-bullet');
+					vars.buttons.bullets.last().addClass(vars.prefix + 'last-bullet');
+					
+					//add functionality
+					vars.buttons.bullets.click(function () {
+						var itemID = $(this).attr('data-' + vars.prefix + 'rel');
+						var
+							$next = vars.container.find('[data-' + vars.prefix + 'item=' + itemID + ']'),
+							curID = parseInt(vars.navigation.find('.' + vars.prefix + 'active-bullet').attr('data-' + vars.prefix + 'rel').replace(vars.prefix + 'item', ''), 10),
+							nextID = parseInt(itemID.replace(vars.prefix + 'item', ''), 10),
+							type;
+						;
+						type = curID < nextID ? 'next' : curID > nextID ? 'prev' : false;
+						if(!type){
+							return false;
+						}
+						transition($slider, settings, type, $next);
+
+						if (vars.isPlaying) {
+							if(settings.pauseOnControlUsage){
+								//stop autoplay, if set
+								pause();
+							}else{
+								resetAutoPlay($slider, settings);
+							}
+						}
+					});
+					
+					vars.buttons.bulletControls.click(function(){
+						var itemID = $(this).attr('data-' + vars.prefix + 'rel');
+						
+						type = (itemID == vars.prefix + 'item-first' || itemID == vars.prefix + 'item-prev') ? 'prev' : 'next';						
+						$next = itemID == vars.prefix + 'item-first' ? vars.items.first() : (itemID == vars.prefix + 'item-last' ? vars.items.last() : false);
+
+						transition($slider, settings, type, $next);
+						
+						if (vars.isPlaying) {
+							if(settings.pauseOnControlUsage){
+								//stop autoplay, if set
+								pause();
+							}else{
+								resetAutoPlay($slider, settings);
+							}
+						}
+					});
 				}
 				//hide/show bullets on hover or never
 				if (settings.showBullets === 'hover') {
-					vars.navigation.hide();
+					vars.navigationContainer.hide();
 					vars.container.mouseenter(
 						function () {
-							vars.navigation.stop(true, true).fadeIn(settings.controlFadeTime);
+							vars.navigationContainer.stop(true, true).fadeIn(settings.controlFadeTime);
 						}).mouseleave(function () {
 							setTimeout(function () {
-								vars.navigation.fadeOut(settings.controlFadeTime);
+								vars.navigationContainer.fadeOut(settings.controlFadeTime);
 							}, 200);
 						});
 				}
@@ -436,20 +568,15 @@
 					//play/pause function cannot be used for they trigger the isPlaying variable
 					$slider
 						.mouseenter(function () {
-							if (vars.isPlaying) {
-								clearInterval(vars.intervalAutoPlay);
-								//stop progressbar, if is included
-								if (features['progressbar'] != undefined) {
-									vars.container.find('.' + vars.prefix + 'progressbar').trigger('stop');
-								}
-								if (settings.controlsPlayPause) {
-									vars.buttons.play.text(settings.playText).removeClass(vars.prefix + 'pause').addClass(vars.prefix + 'play');
-								}
+							if(vars.isPlaying){
+								vars.container.addClass(vars.prefix + 'paused');
+								pause();
 							}
 						})
 						.mouseleave(function () {
-							if (vars.isPlaying) {
+							if (vars.container.hasClass(vars.prefix + 'paused')) {
 								play();
+								vars.container.removeClass(vars.prefix + 'paused');
 							}
 						});
 				}
@@ -479,7 +606,7 @@
 					if (vars.active.is(':last-child')) {
 						if (settings.controlsPrevNext) {
 							vars.buttons.next.addClass('disabled');
-							$slider.data('rhinoslider').pause();
+							pause();
 						}
 						if (settings.autoPlay) {
 							vars.buttons.play.addClass('disabled');
@@ -504,14 +631,19 @@
 				settings.callBackInit($slider, settings, vars);
 			},
 
+		//get active item on init
 			getActive = function (vars, settings) {
-				vars.items.each(function (key, element) {
-					if (key == settings.slideToStart) {
-						$(element).addClass(vars.prefix + 'active');
-					}
-				});
+				if(features.hash != null){
+					vars.hash = features.hash($slider, settings);
+				}else{
+					vars.items.each(function (key, element) {
+						if (key == settings.slideToStart) {
+							$(element).addClass(vars.prefix + 'active');
+						}
+					});
+				}
 				var $active = $slider.find('.' + vars.prefix + 'active');
-				$active.css({
+				$active.stop(true, true).css({
 					zIndex:  1,
 					opacity: 1
 				});
@@ -522,7 +654,7 @@
 
 			consoleLog = function (msg) {
 				if (settings.consoleLog && typeof (console) !== 'undefined' && console != null) {
-					console.log(msg);
+					console.log('Rhinoslider: ' + msg);
 				} else {
 					return false;
 				}
@@ -541,7 +673,8 @@
 		//pause the autoplay and change the bg-image of the button to "play"
 			pause = function () {
 				var vars = $slider.data('rhinoslider:vars');
-				clearInterval(vars.intervalAutoPlay);
+				clearInterval($slider.data('rhinoslider:interval'));
+				$slider.data('rhinoslider:interval', null);
 				vars.isPlaying = false;
 				if (settings.controlsPlayPause) {
 					vars.buttons.play.text(settings.playText).removeClass(vars.prefix + 'pause').addClass(vars.prefix + 'play');
@@ -557,10 +690,17 @@
 		//start/resume the autoplay and change the bg-image of the button to "pause"
 			play = function () {
 				var vars = $slider.data('rhinoslider:vars');
-				consoleLog($slider.attr('id'));
-				vars.intervalAutoPlay = setInterval(function () {
-					next($slider, settings);
+				if($slider.data('rhinoslider:interval') !== null){
+					clearInterval($slider.data('rhinoslider:interval'));
+				}
+				intervalAutoPlay = setInterval(function () {
+					if(vars.isPlaying && !vars.container.hasClass(vars.prefix + 'paused')){
+						transition($slider, settings, 'next');
+					}else{
+						pause();
+					}
 				}, vars.durationAutoPlay);
+				$slider.data('rhinoslider:interval', intervalAutoPlay);
 				vars.isPlaying = true;
 				if (settings.controlsPlayPause) {
 					vars.buttons.play.text(settings.pauseText).removeClass(vars.prefix + 'play').addClass(vars.prefix + 'pause');
@@ -573,162 +713,119 @@
 
 				settings.callBackPlay($slider, settings, vars);
 			},
-
-			prev = function ($slider, settings, $next) {
-				var vars = $slider.data('rhinoslider:vars'), effect = getRandom(settings.effect);
-
-				//if some effect is already running, don't stack up another one
-				if ((!settings.cycled && isFirst(vars.active)) || vars.container.hasClass('inProgress')) {
-					return false;
-				}
-				settings.callBeforePrev($slider, settings, vars);
-
-				vars.container.addClass('inProgress');
-
-				//check, if the active element is the first, so we can set the last element to be the "prev"-element
-				if (!$next) {
-					if (settings.randomOrder) {
-						var nextID = getRandomItem(vars);
-						vars.next = vars.container.find('[data-' + vars.prefix + 'item]' + nextID);
-					} else {
-						vars.next = vars.items.first().hasClass(vars.prefix + 'active') ? vars.items.last() : vars.active.prev();
-					}
-				} else {
-					vars.next = $next;
-				}
-
-				if (vars.next.hasClass(vars.prefix + 'active')) {
-					return false;
-				}
-
-				vars.next.addClass(vars.prefix + 'next-item');
-
-				//check for random effect
-				if (preparations[effect] == undefined) {
-					consoleLog('Preparations for ' + effect + ' not found.');
-				} else {
-					preparations[effect]($slider, settings, vars);
-				}
-
-				//hide captions
-				if (settings.showCaptions !== 'never') {
-					vars.active.find('.' + vars.prefix + 'caption').stop(true, true).fadeOut(settings.captionsFadeTime);
-				}
-
-				if (settings.showBullets !== 'never' && settings.changeBullets == 'before') {
-					vars.navigation.find('.' + vars.prefix + 'active-bullet').removeClass(vars.prefix + 'active-bullet');
-					vars.navigation.find('[data-' + vars.prefix + 'rel=' + vars.next.attr('data-' + vars.prefix + 'item') + ']').addClass(vars.prefix + 'active-bullet');
-				}
-
-				setTimeout(function () {
-					var params = [];
-					params.settings = settings;
-					params.animateActive = settings.animateActive;
-
-					//getDirection
-					params.direction = getRandom(settings.slidePrevDirection);
-
-					//run effect
-					if (effects[effect] == undefined) {
-						consoleLog('Effect ' + effect + ' not found.');
-					} else {
-						consoleLog('Start prev() with ' + effect + ' and element ' + vars.next.attr('data-' + vars.prefix + 'item'));
-						effects[effect]($slider, params);
-					}
-					if (features['progressbar'] != undefined) {
-						vars.container.find('.progressbar').trigger('start');
-					}
-
-					setTimeout(function () {
-						if (settings.showBullets !== 'never' && settings.changeBullets == 'after') {
-							vars.navigation.find('.' + vars.prefix + 'active-bullet').removeClass(vars.prefix + 'active-bullet');
-							vars.navigation.find('[data-' + vars.prefix + 'rel=' + vars.next.attr('data-' + vars.prefix + 'item') + ']').addClass(vars.prefix + 'active-bullet');
-						}
-						settings.callBackPrev($slider, settings, vars);
-						vars.container.removeClass('inProgress');
-						//start progressbar, if is included
-						if (vars.isPlaying && features['progressbar'] != undefined) {
-							vars.container.find('.' + vars.prefix + 'progressbar').trigger('start', [vars.durationAutoPlay - settings.effectTime]);
-						}
-					}, settings.effectTime);
-				}, settings.captionsFadeTime);
+			
+		//reset interval for autoplay
+			resetAutoPlay = function ($slider, settings) {
+				pause();
+				setTimeout(function(){
+					play();
+				}, settings.effectTime + settings.progressbarFadeTime);
 			},
 
-			next = function ($slider, settings, $next) {
-				var vars = $slider.data('rhinoslider:vars'), effect = getRandom(settings.effect);
-
-				//if some effect is already running, don't stack up another one
-				if ((!settings.cycled && isLast(vars.active)) || vars.container.hasClass('inProgress')) {
+		//prev/next function
+			transition = function ($slider, settings, type, $next) {
+				var vars = $slider.data('rhinoslider:vars'), effect = getRandom(settings.effect), inProgress = vars.container.hasClass('inProgress');
+				if ((vars.container.hasClass('inProgress') && !settings.forceTransition) || (!settings.cycled && (type == 'prev' && isFirst(vars.active) || type == 'next' && isLast(vars.active))) || (type != 'prev' && type != 'next')) {
 					return false;
 				}
-				settings.callBeforeNext($slider, settings, vars);
-
+				
+				if(type == 'prev'){
+					settings.callBeforePrev($slider, settings, vars);
+				}else{
+					settings.callBeforeNext($slider, settings, vars);
+				}
+				
 				vars.container.addClass('inProgress');
-
-				//check, if the active element is the last, so we can set the first element to be the "next"-element
+				
+				//check, if the active element is the first/last, so we can set the last/first element to be the "next"-element
 				if (!$next) {
 					if (settings.randomOrder) {
 						var nextID = getRandomItem(vars);
 						vars.next = vars.container.find('[data-' + vars.prefix + 'item]' + nextID);
 					} else {
-						vars.next = vars.items.last().hasClass(vars.prefix + 'active') ? vars.items.first() : vars.active.next();
+						vars.next = type == 'prev' ? (vars.items.first().attr('data-' + vars.prefix + 'item') == vars.active.attr('data-' + vars.prefix + 'item') ? vars.items.last() : vars.active.prev()) : (vars.items.last().attr('data-' + vars.prefix + 'item') == vars.active.attr('data-' + vars.prefix + 'item') ? vars.items.first() : vars.active.next());
 					}
 				} else {
 					vars.next = $next;
 				}
-
+				
 				if (vars.next.hasClass(vars.prefix + 'active')) {
 					return false;
 				}
 
-				vars.next.addClass(vars.prefix + 'next-item');
-
-				//check for random effect
-				if (preparations[effect] == undefined) {
-					consoleLog('Preparations for ' + effect + ' not found.');
-				} else {
-					preparations[effect]($slider, settings, vars);
+				if (inProgress && settings.forceTransition){
+					//clear animation
+					stopTransition($slider, settings, type, vars.active, vars.next);
+				}else{
+					vars.next.addClass(vars.prefix + 'next-item');
+				
+					//check for random effect
+					if (preparations[effect] == undefined) {
+						consoleLog('Preparations for ' + effect + ' not found.');
+					} else {
+						preparations[effect]($slider, settings, vars);
+					}
+				
+					//hide captions
+					if (settings.showCaptions !== 'never') {
+						vars.active.find('.' + vars.prefix + 'caption').stop(true, true).fadeOut(settings.captionsFadeTime);
+					}
+				
+					//change navigation, checks for change-before/-after itself
+					changeNavigation($slider, settings, type, vars.next.attr('data-' + vars.prefix + 'item'));
+					
+					setTimeout(function () {
+						var params = [];
+						params.settings = settings;
+						params.animateActive = settings.animateActive;
+				
+						//getDirection
+						params.direction = getRandom(settings[type == 'prev' ? 'slidePrevDirection' : 'slideNextDirection']);
+				
+						//run effect
+						if (effects[effect] == undefined) {
+							consoleLog('Effect ' + effect + ' not found.');
+						} else {
+							consoleLog('Start transition['+type+']() with ' + effect + ' and element ' + vars.next.attr('data-' + vars.prefix + 'item'));
+							effects[effect]($slider, params);
+						}
+						
+						if (type == 'prev' && features['progressbar'] != undefined) {
+							vars.container.find('.progressbar').trigger('start');
+						}
+						
+						setTimeout(function () {
+							settings[type == 'prev' ? 'callBackPrev' : 'callBackNext']($slider, settings, vars);
+							vars.container.removeClass('inProgress');
+							//start progressbar, if is included
+							if (vars.isPlaying && features['progressbar'] != undefined) {
+								vars.container.find('.' + vars.prefix + 'progressbar').trigger('start', [vars.durationAutoPlay - settings.effectTime]);
+							}
+						}, settings.effectTime);
+					}, settings.captionsFadeTime);
 				}
-
-				//hide captions
-				if (settings.showCaptions !== 'never') {
-					vars.active.find('.' + vars.prefix + 'caption').stop(true, true).fadeOut(settings.captionsFadeTime);
-				}
-
-				if (settings.showBullets !== 'never' && settings.changeBullets == 'before') {
+			},
+			
+		//change navigation before/after transition
+			changeNavigation = function ($slider, settings, type, nextItemID) {
+				if (settings.showBullets === 'never') {return false;}
+				var
+					vars = $slider.data('rhinoslider:vars'),
+					time = settings.changeBullets == 'after' ? settings.effectTime + settings.captionsFadeTime : 0,
+					curLeft = parseInt(vars.navigation.css('margin-left'), 10),
+					navWidth = vars.navigation.width() - vars.navigation.parent().outerWidth(),
+					nextItemIndex = nextItemID.replace(vars.prefix + 'item', '');
+				;
+				setTimeout(function(){
 					vars.navigation.find('.' + vars.prefix + 'active-bullet').removeClass(vars.prefix + 'active-bullet');
 					vars.navigation.find('[data-' + vars.prefix + 'rel=' + vars.next.attr('data-' + vars.prefix + 'item') + ']').addClass(vars.prefix + 'active-bullet');
-				}
+					
+					//animate
+					marginLeft = -Math.abs(nextItemIndex * vars.bulletWidth) + (parseInt(settings.maxBullets / 2, 10) * vars.bulletWidth);
 
-				setTimeout(function () {
-					var params = [];
-					params.settings = settings;
-					params.animateActive = settings.animateActive;
-
-					//getDirection
-					params.direction = getRandom(settings.slideNextDirection);
-
-					//run effect
-					if (effects[effect] == undefined) {
-						consoleLog('Effect ' + effect + ' not found.');
-					} else {
-						consoleLog('Start next() with ' + effect + ' and element ' + vars.next.attr('data-' + vars.prefix + 'item'));
-						effects[effect]($slider, params);
-					}
-
-					setTimeout(function () {
-						if (settings.showBullets !== 'never' && settings.changeBullets == 'after') {
-							vars.navigation.find('.' + vars.prefix + 'active-bullet').removeClass(vars.prefix + 'active-bullet');
-							vars.navigation.find('[data-' + vars.prefix + 'rel=' + vars.next.attr('data-' + vars.prefix + 'item') + ']').addClass(vars.prefix + 'active-bullet');
-						}
-						settings.callBackNext($slider, settings, vars);
-						vars.container.removeClass('inProgress');
-						//start progressbar, if is included
-						if (vars.isPlaying && features['progressbar'] != undefined) {
-							vars.container.find('.' + vars.prefix + 'progressbar').trigger('start', [vars.durationAutoPlay - settings.effectTime]);
-						}
-					}, settings.effectTime);
-				}, settings.captionsFadeTime);
+					marginLeft = marginLeft >= 0 ? 0 : Math.abs(marginLeft) >= navWidth ?  -navWidth : marginLeft;
+					vars.navigation.stop(true, true).animate({marginLeft: marginLeft}, settings.controlsFadeTime, 'linear');
+				}, time);
 			},
 
 		//get random itemID
@@ -753,30 +850,51 @@
 		//get random item
 			getRandom = function (array) {
 				return array[parseInt((Math.random() * array.length), 10)];
-			};
+			},
 
 		//helper function
-		empty = function (string) {
-			return $.trim(string.toString()) == '';
-		};
+			empty = function (string) {
+				return $.trim(string.toString()) == '';
+			}
+			
+		//stop current transition
+			stopTransition = function($slider, settings, type, $active, $next){
+				var vars = $slider.data('rhinoslider:vars'), i = 1, resetQuantity = 0;
+				vars.active = $active.stop(true, true);
+				vars.next = $next.stop(true, true);
+				$slider.data('rhinoslider:vars', vars);
+				$.each($.rhinoslider.resets, function () {
+					resetQuantity++;
+				});
+				$.each(resets, function (key, resetFunction) {
+					resetFunction($slider, settings);
+					if(i === resetQuantity){
+						vars.container.removeClass('inProgress');
+						transition($slider, settings, type);
+					}
+					i++;
+				});
+			}
+		;
 
-		this.pause = function () {
+		this.pause = this.stop = function () {
 			pause();
 		};
-		this.play = function () {
+		this.play = this.start = function () {
 			play();
 		};
 		this.toggle = function () {
 			toggle();
 		};
 		this.prev = function ($next) {
-			prev($slider, settings, $next);
+			transition($slider, settings, 'prev', $next);
 		};
 		this.next = function ($next) {
-			next($slider, settings, $next);
+			transition($slider, settings, 'next', $next);
 		};
-		this.debug = function () { // @did removed param dontLog, cause it was unused
+		this.debug = function () {
 			console.log('Rhinoslider v' + vars.version);
+			console.log('Using jQuery v' + $().jquery);
 			console.log('Settings:');
 			console.log(settings);
 			console.log(vars.items.length + ' items');
@@ -801,6 +919,9 @@
 			$newSlider = this.uninit();
 			$newSlider.rhinoslider(settings);
 		};
+		this.consoleLog = function(msg){
+			consoleLog(msg);
+		}
 
 		init($slider, settings, vars);
 	};
@@ -821,7 +942,7 @@
 		});
 	};
 
-	var externalCallers = ['next', 'prev', 'play', 'pause', 'debug', 'uninit', 'kill', 'destroy', 'remove', 'reset', 'refresh', 'reload'];
+	var externalCallers = ['next', 'prev', 'play', 'pause', 'debug', 'uninit', 'kill', 'destroy', 'remove', 'reset', 'refresh', 'reload', 'stop', 'start', 'consoleLog'];
 	$.each(externalCallers, function (i, functionName) {
 		$.rhinoslider[functionName] = function (selector, variable) {
 			$(selector).data('rhinoslider')[functionName](variable);
@@ -836,17 +957,19 @@
 		//linear or shuffled order for items
 		randomOrder:            false,
 		//show/hide prev/next-controls
-		controlsPrevNext:       true,
+		controlsPrevNext:       false,
 		//show/hide play/pause-controls
-		controlsPlayPause:      true,
+		controlsPlayPause:      false,
 		//pause on mouse-over
-		pauseOnHover:           true,
+		pauseOnHover:           false,
 		//pause when controls are used
 		pauseOnControlUsage:    true,
+		//if true, transitions will be stopped, when clicking next/prev
+		forceTransition:        false,
 		//if the active content should be animated too - depending on effect slide
 		animateActive:          true,
 		//start slideshow automatically on init
-		autoPlay:               false,
+		autoPlay:               true,
 		//begin from start if end has reached
 		cycled:                 true,
 		//sets if actions should be logged
@@ -856,11 +979,7 @@
 		//width to calculate aspecRatio
 		height:                 null,
 		//features that should be used: null triggers all
-		features:               null,
-		//use hashtags to determine slide to start
-		useHashTags:            false,
-		//determine, if every slide should be added to browser history
-		useHistory:             false,
+		features:               'none',
 		//time, the content is visible before next content will be blend in - depends on autoPlay
 		showTime:               3000,
 		//time, the effect will last
@@ -881,6 +1000,8 @@
 		slideToStart:           0,
 		//time, progressbar fades out
 		progressbarFadeTime:    300,
+		//maximum of bullets visible at a time
+		maxBullets:             5,
 		//width, the animation for moving the content needs, can be comma-seperated string (x,y) or int if both are the same
 		shiftValue:             '150',
 		//amount of parts per line for shuffle effect
@@ -888,13 +1009,13 @@
 		//show image-title: hover, always, never
 		showCaptions:           'never',
 		//show navigation: hover, always, never
-		showBullets:            'hover',
+		showBullets:            'never',
 		//change bullets before or after the animation
 		changeBullets:          'after',
 		//type of bullet content
 		bulletType:             'number',
 		//show controls: hover, always, never
-		showControls:           'hover',
+		showControls:           'never',
 		//the direction, the prev-button triggers - depending on effect slide
 		slidePrevDirection:     'toLeft',
 		//the direction, the next-button triggers - depending on effect slide
@@ -902,7 +1023,7 @@
 		//direction, where the progressbar  goes
 		progressbarDirection:   'toRight',
 		//check if controlsKeyboard is global or on slider only
-		globalControlsKeyboard: true,
+		globalControlsKeyboard: false,
 		//text for the prev-button
 		prevText:               'prev',
 		//text for the next-button
@@ -920,7 +1041,7 @@
 		//action done when swipeGesture "left" is triggered: prev, next
 		swipeLeft:              'prev',
 		//style which will be transfered to the containerelement
-		styles:                 'position,top,right,bottom,left,margin-top,margin-right,margin-bottom,margin-left,width,height,min-width,min-height,max-width,max-height',
+		styles:                 'position,top,right,bottom,left,margin-top,margin-right,margin-bottom,margin-left,width,height,min-width,min-height,max-width,max-height,float',
 		//if bulletType is image or imageHover, this is the source if no image is found
 		noImage:                'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAHgAAAAyCAMAAACgee/qAAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAAyBpVFh0WE1MOmNvbS5hZG9iZS54bXAAAAAAADw/eHBhY2tldCBiZWdpbj0i77u/IiBpZD0iVzVNME1wQ2VoaUh6cmVTek5UY3prYzlkIj8+IDx4OnhtcG1ldGEgeG1sbnM6eD0iYWRvYmU6bnM6bWV0YS8iIHg6eG1wdGs9IkFkb2JlIFhNUCBDb3JlIDUuMC1jMDYwIDYxLjEzNDc3NywgMjAxMC8wMi8xMi0xNzozMjowMCAgICAgICAgIj4gPHJkZjpSREYgeG1sbnM6cmRmPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5LzAyLzIyLXJkZi1zeW50YXgtbnMjIj4gPHJkZjpEZXNjcmlwdGlvbiByZGY6YWJvdXQ9IiIgeG1sbnM6eG1wPSJodHRwOi8vbnMuYWRvYmUuY29tL3hhcC8xLjAvIiB4bWxuczp4bXBNTT0iaHR0cDovL25zLmFkb2JlLmNvbS94YXAvMS4wL21tLyIgeG1sbnM6c3RSZWY9Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC9zVHlwZS9SZXNvdXJjZVJlZiMiIHhtcDpDcmVhdG9yVG9vbD0iQWRvYmUgUGhvdG9zaG9wIENTNSBXaW5kb3dzIiB4bXBNTTpJbnN0YW5jZUlEPSJ4bXAuaWlkOkI4QzQ3QjM0QTcxODExRTFBQTdBOEU1NzA0NjNGNDkyIiB4bXBNTTpEb2N1bWVudElEPSJ4bXAuZGlkOkI4QzQ3QjM1QTcxODExRTFBQTdBOEU1NzA0NjNGNDkyIj4gPHhtcE1NOkRlcml2ZWRGcm9tIHN0UmVmOmluc3RhbmNlSUQ9InhtcC5paWQ6QjhDNDdCMzJBNzE4MTFFMUFBN0E4RTU3MDQ2M0Y0OTIiIHN0UmVmOmRvY3VtZW50SUQ9InhtcC5kaWQ6QjhDNDdCMzNBNzE4MTFFMUFBN0E4RTU3MDQ2M0Y0OTIiLz4gPC9yZGY6RGVzY3JpcHRpb24+IDwvcmRmOlJERj4gPC94OnhtcG1ldGE+IDw/eHBhY2tldCBlbmQ9InIiPz57VK4hAAAAMFBMVEWgoKBpaWnJycmFhYV3d3fx8fGSkpKtra3W1tbk5OS7u7tOTk5BQUFcXFwzMzP///+xgpaDAAABwklEQVR42uyW4XLDIAiAUVDRdPP933aCmqS9XHerTXvrmR9GiOETJBDIb7pggid4gid4gv81mMOJe7tn1X6z3MytHk8He3JH4PM9Bus7mBGIm16UPiFCDohJraAH5jZJMrEIGB8HZ0gVHI3LzjRLojAl3uGrvC0roCSD/bJtcrHClfXucXAuMOHo7qPfgWWyVMmRxsE2rUxUw34AHGnj9NNeFW2waiTYNoECvhi5YACcA6jHErWIx2CH3VG88ngguWSkRXNL6HwMVhQvZfDljFnOOJUou7vZ9TvY6UkmY8g2PXUm9cGTwSSPwRDKNnIgs34FryqZ9z+jk8DRZfDvaBKMFD64Le59C3ykPQEMfP0u2D9ahCdF69ngSIDyPwB9rS0KF2po9zIk8Bj6qlCalBsBS4NxiPXblHpiUTdTPbySpXABVItyZxoBe1Z6bUxSr7VgpQ28ydBrKLSKBmkAbNZfHXLaIlQRb8Bd7lq7aG8aAfvYPM4hSB5XX3Yeb7KerwQFWrcaSq4olrD2gpXhzAbe5KXsK/hq0Sdt5CNZzVRCVlO6FgbtOht4k1NZ6btF6VbuA0vmBE/wBE/wBL/m+hFgAMzATBHD/2PjAAAAAElFTkSuQmCC',
 		//callbacks
@@ -1300,8 +1421,6 @@
 					var partValues = [];
 					partValues.width = vars.next.width() / settings.parts.x;
 					partValues.height = vars.next.height() / settings.parts.y;
-					console.log(vars.next.height());
-					console.log(partValues.height);
 					if (settings.animateActive) {
 						$activeParts.each(function (i, element) {
 							$element = $(element);
@@ -1429,8 +1548,8 @@
 					settings.parts.x = settings.parts.x < 1 ? 1 : settings.parts.x;
 					settings.parts.y = settings.parts.y < 1 ? 1 : settings.parts.y;
 					settings.parts = calcParts(settings.parts, true);
-					settings.shiftValue.x = settings.shiftValue.x < 0 ? settings.shiftValue.x * -1 : settings.shiftValue.x;
-					settings.shiftValue.y = settings.shiftValue.y < 0 ? settings.shiftValue.y * -1 : settings.shiftValue.y;
+					settings.shiftValue.x = Math.abs(settings.shiftValue.x);
+					settings.shiftValue.y = Math.abs(settings.shiftValue.y);
 					var
 						activeContent = vars.active.html(),
 						nextContent = vars.next.html(),
@@ -1615,7 +1734,7 @@
 				values = [],
 				preSlide = function ($slider, settings, $item) {
 					var vars = $slider.data('rhinoslider:vars'), parts = settings.parts.x < 1 ? 1 : settings.parts.x;
-					parts = settings.parts.y == settings.parts.x ? settings.parts.x : settings.parts.x * settings.parts.y;
+					parts = settings.parts.x < 1 ? 1 : settings.parts.x;
 					$item.html('<div class="' + vars.prefix + 'partContainer">' + $item.html() + '</div>');
 					var
 						part = $item.html(),
@@ -1706,10 +1825,10 @@
 			//effect "slideBars"
 				slideBars = function ($slider, settings) {
 					parts = settings.parts.x < 1 ? 1 : settings.parts.x;
-					parts = settings.parts.y == settings.parts.x ? settings.parts.x : settings.parts.x * settings.parts.y;
 					var vars = $slider.data('rhinoslider:vars');
 					var
 						partDuration, partDelay = settings.partDelay,
+						minPartDuration = 300,
 						activeContent = vars.active.html(),
 						nextContent = vars.next.html(),
 						width = $slider.width(),
@@ -1727,6 +1846,12 @@
 					}
 
 					partDuration = settings.effectTime - (2 * ((parts - 1) * partDelay));
+					console.log('partDuration', partDuration);
+					if(partDuration < minPartDuration){
+						settings.effectTime = Math.abs(partDuration) + settings.effectTime + minPartDuration;
+						partDuration = settings.effectTime - (2 * ((parts - 1) * partDelay));
+					}
+					
 
 					vars.active.css({
 						backgroundImage: 'none',
@@ -2003,17 +2128,13 @@
 					startCoords = [];
 					$slider.data('rhinoslider').pause();
 				}
-				;
-			$('[data-rhino-id=' + vars.container.attr('data-rhino-id') + ']').delegate('#' + $slider.attr('id'), 'touchstart', start);
-			$('[data-rhino-id=' + vars.container.attr('data-rhino-id') + ']').delegate('#' + $slider.attr('id'), 'touchmove', move);
-
-			$('[data-rhino-id=' + vars.container.attr('data-rhino-id') + ']').delegate('#' + $slider.attr('id'), 'mousedown', start);
-			$('[data-rhino-id=' + vars.container.attr('data-rhino-id') + ']').delegate('#' + $slider.attr('id'), 'mouseup', move);
-			/*			$slider.get(0).addEventListener('touchstart', start, false);
-			 $slider.get(0).addEventListener('touchmove', move, false);
-
-			 $slider.get(0).addEventListener('mousedown', start, false);
-			 $slider.get(0).addEventListener('mouseup', move, false);*/
+			;
+		
+			$slider.get(0).addEventListener('touchstart', start, false);		
+			$slider.get(0).addEventListener('touchmove', move, false);
+			//if links are in content, this disables them
+			/*$slider.get(0).addEventListener('mousedown', start, false);		
+			$slider.get(0).addEventListener('mousemove', move, false);*/
 		},
 		resize:             function ($slider, settings) {
 			var vars = $slider.data('rhinoslider:vars');
@@ -2046,7 +2167,6 @@
 				resetCSS,
 				animateCSS,
 				$pBar,
-				pBarInterval,
 				dir = settings.progressbarDirection,
 				id = vars.container.attr('data-' + vars.prefix + 'id')
 				;
@@ -2057,7 +2177,7 @@
 			resetCSS.display = 'block';
 
 			vars.container
-				.delegate(' .' + vars.prefix + 'progressbar', 'start', function (e, duration) {
+				.on('start', '.' + vars.prefix + 'progressbar', function (e, duration) {
 					animateCSS = (dir == 'toTop' || dir == 'toBottom') ? {height: $slider.height()} : {width: $slider.width()};
 					$pBar.stop(true, true).css(resetCSS).animate(animateCSS, (duration - settings.progressbarFadeTime), 'linear', function () {
 						$pBar.stop(true, true).fadeOut(settings.progressbarFadeTime, function () {
@@ -2065,19 +2185,51 @@
 						});
 					});
 				})
-				.delegate('.' + vars.prefix + 'progressbar', 'stop', function (e) {
-					clearInterval(pBarInterval);
+				.on('stop', '.' + vars.prefix + 'progressbar', function (e) {
 					$pBar.stop(true, false).fadeOut(settings.progressbarFadeTime, function () {
 						$pBar.css(resetCSS);
 					});
 				})
 			;
+		},
+		hash:               function ($slider, settings) {
+			var
+				vars = $slider.data('rhinoslider:vars'),
+				hash = location.hash.replace('#', ''),
+				$active,
+				index
+			;
+			//prevent feature to run again at the end of init()
+			if(vars.hash){
+				return true;
+			}
+			
+			if(hash.indexOf('/') > -1){
+				hash = hash.split('/');
+				hash = hash[hash.length - 1];
+			}
+			
+			if($.trim(hash) != '' && vars.container.find('#' + hash).length > 0){
+				$active = vars.container.find('#' + hash).parents('.' + vars.prefix + 'item');
+			}else{
+				index = vars.items.length > parseInt(hash, 10) ? hash : settings.slideToStart;
+				vars.items.each(function (key, element) {
+					if (key == index) {
+						$active = $(element);
+					}
+				});
+			}
+			
+			$active.addClass(vars.prefix + 'active');
+			return true;
 		}
 	};
 
 	$.rhinoslider.resets = {
 		activeElement: function ($slider, settings) {
 			var vars = $slider.data('rhinoslider:vars');
+			if(!vars){return false;}
+			
 			//set the active-element on the same z-index as the rest and reset css
 			vars.container.find('.' + vars.prefix + 'active').stop(true, true).css({
 				zIndex:  0,
@@ -2086,17 +2238,19 @@
 				margin:  0,
 				opacity: 0
 			})
-				//and remove its active class
-				.removeClass(vars.prefix + 'active');
+			//and remove its active class
+			.removeClass(vars.prefix + 'active');
 		},
 		nextElement:   function ($slider, settings) {
 			var vars = $slider.data('rhinoslider:vars');
+			if(!vars){return false;}
 			//set the active-element on the same z-index as the rest and reset css
 			vars.container.find('.' + vars.prefix + 'next-item')
 				//remove the next-class
 				.removeClass(vars.prefix + 'next-item')
 				//add the active-class
 				.addClass(vars.prefix + 'active')
+				.stop(true, true)
 				//and put  it above the others
 				.css({
 					zIndex:  1,
@@ -2108,6 +2262,7 @@
 		},
 		cycled:        function ($slider, settings) {
 			var vars = $slider.data('rhinoslider:vars');
+			if(!vars){return false;}
 			//check if cycled is false and start or end is reached
 			if (!settings.cycled) {
 				if (settings.controlsPrevNext) {
@@ -2135,6 +2290,7 @@
 		},
 		misc:          function ($slider, settings) {
 			var vars = $slider.data('rhinoslider:vars');
+			if(!vars){return false;}
 
 			//make the "next"-element the new active-element
 			vars.active = vars.next;
